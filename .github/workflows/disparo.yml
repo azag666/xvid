@@ -1,48 +1,44 @@
-name: Disparo Grupo Telegram
+name: Disparo Monetizado Telegram
 
 on:
-  # Permite que o seu site (Frontend) chame este fluxo remotamente
   repository_dispatch:
     types: [iniciar_disparo]
-  
-  # Permite rodar manualmente pela aba "Actions" do GitHub para testes
   workflow_dispatch:
     inputs:
       video_url:
-        description: 'Cole a URL (Vídeo ou Categoria)'
         required: true
         type: string
       caption_text:
-        description: 'Texto Extra / @SeuCanal'
         required: false
+        type: string
+      button_link:
+        required: true
         type: string
 
 jobs:
   publicar-no-grupo:
     runs-on: ubuntu-latest
     steps:
-      - name: Baixar código do repositório
+      - name: Baixar código
         uses: actions/checkout@v3
 
       - name: Configurar Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.9'
+          python-version: '3.10'
 
-      - name: Instalar bibliotecas necessárias
-        # Adicionamos 'cloudscraper' aqui para garantir que funcione mesmo sem requirements.txt atualizado
-        run: |
-          pip install requests beautifulsoup4 cloudscraper
+      - name: Instalar FFmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
 
-      - name: Executar Robô
+      - name: Instalar Dependências
+        run: pip install requests beautifulsoup4 cloudscraper yt-dlp
+
+      - name: Executar Sniper Engine
         env:
-          # Segredos configurados no GitHub (Settings > Secrets)
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          
-          # Pega a URL vinda do site (payload) OU do input manual (workflow_dispatch)
           TARGET_URL: ${{ github.event.client_payload.video_url || inputs.video_url }}
-          
-          # Pega a Legenda vinda do site (payload) OU do input manual
           CUSTOM_CAPTION: ${{ github.event.client_payload.caption_text || inputs.caption_text }}
+          # ESTA LINHA ABAIXO É A QUE ESTAVA A FALTAR:
+          BUTTON_LINK: ${{ github.event.client_payload.button_link || inputs.button_link }}
         run: python automation.py
