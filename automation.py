@@ -40,6 +40,7 @@ def process_single_video(url, custom_text=""):
         # Título
         og_title = soup.find("meta", property="og:title")
         title = og_title["content"] if og_title else "Vídeo Hot"
+        # Limpeza padrão
         title = title.replace(" - XVIDEOS.COM", "").replace("XVIDEOS.COM - ", "").strip()
 
         # Thumbnail
@@ -73,7 +74,7 @@ def get_videos_from_listing(url):
         
         count = 0
         for block in blocks:
-            if count >= 3: break # Limite de 3 para evitar spam
+            if count >= 5: break # AUMENTADO PARA 5 VÍDEOS
             try:
                 a_tag = block.find('p', class_='title').find('a')
                 full_link = f"https://www.xvideos.com{a_tag['href']}"
@@ -97,10 +98,12 @@ def send_payload(method, payload):
 def smart_send(data):
     """Tenta enviar vídeo, se falhar, envia foto"""
     
-    caption = f"🔥 <b>{data['titulo']}</b>\n\n"
+    # LEGENDA LIMPA: Apenas Título (com link embutido) e Texto Personalizado
+    # O link do vídeo fica "escondido" no título clicável
+    caption = f"🇧🇷 <a href=\"{data['link']}\"><b>{data['titulo']}</b></a>"
+    
     if data['custom_text']:
-        caption += f"📣 {data['custom_text']}\n\n"
-    caption += f"🔗 Assista completo: {data['link']}"
+        caption += f"\n\n📣 {data['custom_text']}"
 
     # TENTATIVA 1: Enviar Vídeo (Se existir)
     if data['type'] == 'video' and data['video_url']:
