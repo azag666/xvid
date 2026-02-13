@@ -6,22 +6,21 @@ import json
 import re
 import subprocess
 
-# --- AUTO-INSTALAÇÃO DE DEPENDÊNCIAS CRÍTICAS ---
+# --- AUTO-INSTALAÇÃO DE DEPENDÊNCIAS ---
 def install_package(package):
     try:
-        print(f"⬇️ Instalando {package} automaticamente...")
         subprocess.check_call([sys.executable, "-m", "pip", "install", package])
-    except Exception as e:
-        print(f"❌ Erro ao instalar {package}: {e}")
+    except:
+        pass
 
-# Garante yt-dlp
+# Garante que o motor de extração esteja presente
 try:
     import yt_dlp
 except ImportError:
     install_package("yt-dlp")
     import yt_dlp
 
-# Garante cloudscraper
+# Garante que o simulador de navegador esteja presente
 try:
     import cloudscraper
 except ImportError:
@@ -30,93 +29,64 @@ except ImportError:
 
 from bs4 import BeautifulSoup
 
-# --- VERIFICAÇÃO E INSTALAÇÃO DO FFMPEG ---
-def check_ffmpeg():
-    try:
-        subprocess.run(['ffmpeg', '-version'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        return True
-    except FileNotFoundError:
-        print("⚠️ FFmpeg não encontrado. Tentando instalar via apt-get...")
-        try:
-            # Em ambientes Debian/Ubuntu (como o GitHub Actions), podemos tentar instalar via sudo apt
-            subprocess.run(['sudo', 'apt-get', 'update', '-y'], check=True)
-            subprocess.run(['sudo', 'apt-get', 'install', 'ffmpeg', '-y'], check=True)
-            return True
-        except Exception as e:
-            print(f"❌ Não foi possível instalar o FFmpeg: {e}")
-            return False
-
-# --- CONFIGURAÇÕES ---
+# --- CONFIGURAÇÕES DO SISTEMA ---
 TELEGRAM_TOKEN = os.environ.get('TELEGRAM_TOKEN')
 CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID')
 TARGET_URL = os.environ.get('TARGET_URL')
 CUSTOM_CAPTION = os.environ.get('CUSTOM_CAPTION', '')
+BUTTON_LINK = os.environ.get('BUTTON_LINK') # Link de Checkout/Venda configurado no painel
 
-# Configura o scraper simulando um navegador
+# Inicializa o scraper com perfil de navegador real
 scraper = cloudscraper.create_scraper(browser={'browser': 'chrome', 'platform': 'windows', 'mobile': False})
 
-# Cabeçalhos para FORÇAR o conteúdo em Português e simular tráfego real
+# Headers para simular tráfego humano e forçar idioma PT-BR
 HEADERS_PT = {
-    'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
+    'Accept-Language': 'pt-BR,pt;q=0.9',
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
     'Referer': 'https://www.google.com/'
 }
 
+def check_ffmpeg():
+    """Verifica se o FFmpeg está instalado, essencial para os recortes."""
+    try:
+        subprocess.run(['ffmpeg', '-version'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return True
+    except FileNotFoundError:
+        print("⚠️ FFmpeg não encontrado no ambiente. Tentando instalação manual...")
+        try:
+            subprocess.run(['sudo', 'apt-get', 'update', '-y'], check=True)
+            subprocess.run(['sudo', 'apt-get', 'install', 'ffmpeg', '-y'], check=True)
+            return True
+        except:
+            return False
+
 def get_direct_video_url(page_url):
-    """
-    Usa yt-dlp de forma agressiva para extrair a URL direta do vídeo.
-    """
-    print(f"🕵️‍♂️ Extraindo link real do vídeo: {page_url}")
-    
+    """Extrai o link direto do arquivo de vídeo usando yt-dlp."""
     ydl_opts = {
         'quiet': True,
         'no_warnings': True,
-        'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+        'format': 'bestvideo[ext=mp4]/best[ext=mp4]/best',
         'socket_timeout': 30,
         'user_agent': HEADERS_PT['User-Agent'],
-        'nocheckcertificate': True,
     }
-    
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(page_url, download=False)
-            video_url = info.get('url')
-            if video_url:
-                print("✅ Link direto obtido via yt-dlp!")
-                return video_url
+            return info.get('url')
     except Exception as e:
-        print(f"⚠️ Erro no yt-dlp: {e}")
-    
-    # Plano B: Regex (Xvideos costuma expor isso em variáveis JS)
-    print("🔄 Tentando extração via Regex...")
-    try:
-        response = scraper.get(page_url, headers=HEADERS_PT, timeout=20)
-        html = response.text
-        match = re.search(r"html5player\.setVideoUrlHigh\('([^']+)'\)", html)
-        if not match:
-            match = re.search(r"html5player\.setVideoUrlLow\('([^']+)'\)", html)
-        
-        if match:
-            print("✅ Link extraído via Regex!")
-            return match.group(1)
-    except Exception as e:
-        print(f"⚠️ Erro no Plano B: {e}")
-        
-    return None
+        print(f"⚠️ Erro na extração do link direto: {e}")
+        return None
 
 def generate_snippet(video_direct_url, duration=3):
-    """
-    Gera um recorte do vídeo usando FFmpeg. 
-    Reduzido para 3 segundos conforme solicitado.
-    """
-    output_file = f"video_{int(time.time())}.mp4"
-    print(f"✂️ Criando recorte de {duration} segundos...")
+    """Gera um recorte de 3 segundos focado em conversão."""
+    output_file = f"snippet_{int(time.time())}.mp4"
+    print(f"✂️ Gerando preview de {duration}s...")
     
-    # Parâmetros otimizados para stream e velocidade
+    # Comando FFmpeg otimizado para velocidade 'ultrafast'
     cmd = [
         'ffmpeg', '-y', '-hide_banner', '-loglevel', 'error',
         '-headers', f'User-Agent: {HEADERS_PT["User-Agent"]}\r\nReferer: https://www.xvideos.com/\r\n',
-        '-ss', '00:00:05', # Pula os 5 primeiros segundos
+        '-ss', '00:00:15', # Pula o início para pegar uma cena de impacto
         '-t', str(duration),
         '-i', video_direct_url,
         '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '32',
@@ -125,149 +95,111 @@ def generate_snippet(video_direct_url, duration=3):
         '-movflags', '+faststart',
         output_file
     ]
-    
     try:
-        subprocess.run(cmd, check=True, timeout=300)
-        
+        subprocess.run(cmd, check=True, timeout=120)
         if os.path.exists(output_file) and os.path.getsize(output_file) > 1000:
-            print(f"✅ Recorte pronto: {os.path.getsize(output_file) // 1024} KB")
             return output_file
-        else:
-            print("❌ Arquivo gerado é inválido ou muito pequeno.")
     except Exception as e:
-        print(f"⚠️ Falha no FFmpeg: {e}")
+        print(f"⚠️ Falha no processamento do vídeo: {e}")
         if os.path.exists(output_file): os.remove(output_file)
-    
     return None
 
-def process_single_video(url, custom_text=""):
-    print(f"🔍 Analisando: {url}")
-    try:
-        response = scraper.get(url, headers=HEADERS_PT, timeout=20)
-        soup = BeautifulSoup(response.text, 'html.parser')
-        
-        og_title = soup.find("meta", property="og:title")
-        title = og_title["content"] if og_title else "Vídeo"
-        title = title.replace(" - XVIDEOS.COM", "").strip()
-
-        video_direct_url = get_direct_video_url(url)
-        
-        if video_direct_url:
-            local_video_path = generate_snippet(video_direct_url, duration=3)
-            if local_video_path:
-                return {
-                    "type": "video",
-                    "video_path": local_video_path,
-                    "titulo": title,
-                    "link": url,
-                    "custom_text": custom_text
-                }
-        
-        print(f"⏭️ Pulando {url} pois não foi possível gerar o vídeo.")
-        return None
-    except Exception as e:
-        print(f"❌ Erro ao processar item: {e}")
-        return None
-
-def get_videos_from_listing(url):
-    """Busca vídeos em listagens."""
-    print(f"📑 Lendo lista em Português...")
-    links = []
-    try:
-        response = scraper.get(url, headers=HEADERS_PT, timeout=25)
-        soup = BeautifulSoup(response.text, 'html.parser')
-        blocks = soup.find_all('div', class_='thumb-block')
-        
-        count = 0
-        for block in blocks:
-            if count >= 10: break # LIMITE AUMENTADO PARA 10 VÍDEOS
-            try:
-                a_tag = block.find('p', class_='title').find('a')
-                full_link = f"https://www.xvideos.com{a_tag['href']}"
-                links.append(full_link)
-                count += 1
-            except: continue
-        return links
-    except Exception as e:
-        print(f"❌ Erro ao carregar listagem: {e}")
-        return []
-
-def send_video(data):
-    """Envia o arquivo de vídeo recortado para o Telegram com botão."""
+def send_to_telegram(data):
+    """Envia o vídeo para o Telegram com botões de venda configurados."""
     api_url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendVideo"
     
-    # Título agora é texto simples, sem link embutido
-    caption = f"🇧🇷 <b>{data['titulo']}</b>"
-    if data['custom_text']:
-        caption += f"\n\n📣 {data['custom_text']}"
+    # Legenda 100% Stealth (sem links externos, título limpo)
+    caption = f"🔞 <b>{data['titulo']}</b>\n\n"
+    if CUSTOM_CAPTION:
+        caption += f"💎 {CUSTOM_CAPTION}\n\n"
+    else:
+        caption += "🔥 <b>CONTEÚDO COMPLETO DISPONÍVEL!</b>\n"
+        caption += "🚀 Assista agora sem censura e em 4K.\n\n"
+    
+    caption += "👇 <b>LIBERE O ACESSO ABAIXO:</b>"
 
-    # Configuração do Botão Inline (URL do vídeo)
+    # Botões direcionando APENAS para o link de checkout configurado no painel
     reply_markup = {
         "inline_keyboard": [
-            [
-                {"text": "🎥 Assistir Vídeo Completo", "url": data['link']}
-            ]
+            [{"text": "🔓 LIBERAR VÍDEO (PIX)", "url": BUTTON_LINK}],
+            [{"text": "⭐ PACK VITALÍCIO - R$ 19,99", "url": BUTTON_LINK}]
         ]
     }
 
-    print(f"🚀 Enviando vídeo para o grupo...")
     try:
-        with open(data['video_path'], 'rb') as video_file:
+        with open(data['path'], 'rb') as f:
             payload = {
                 'chat_id': CHAT_ID,
                 'caption': caption,
                 'parse_mode': 'HTML',
                 'supports_streaming': 'true',
-                'reply_markup': json.dumps(reply_markup) # Adiciona o botão
+                'reply_markup': json.dumps(reply_markup)
             }
-            files = {'video': video_file}
-            r = requests.post(api_url, data=payload, files=files, timeout=300)
+            r = requests.post(api_url, data=payload, files={'video': f}, timeout=150)
             res = r.json()
-            
-        os.remove(data['video_path'])
+            if not res.get('ok'):
+                print(f"❌ Erro API Telegram: {res.get('description')}")
         
-        if res.get('ok'):
-            print("✅ Vídeo enviado com sucesso!")
-            return True
-        else:
-            print(f"❌ Erro Telegram: {res.get('description')}")
-            return False
+        # Limpeza do arquivo local
+        os.remove(data['path'])
     except Exception as e:
         print(f"❌ Erro no envio: {e}")
-        return False
 
 if __name__ == "__main__":
-    if not all([TELEGRAM_TOKEN, CHAT_ID, TARGET_URL]):
-        print("❌ Configurações ausentes (TOKEN, ID ou URL).")
+    if not all([TELEGRAM_TOKEN, CHAT_ID, TARGET_URL, BUTTON_LINK]):
+        print("❌ Faltam configurações (Token, Chat ID, URL ou Link de Checkout).")
         sys.exit(1)
 
-    # Garante que o FFmpeg esteja instalado antes de começar
     if not check_ffmpeg():
-        print("❌ Abortando: FFmpeg não disponível.")
+        print("❌ FFmpeg é obrigatório para gerar recortes.")
         sys.exit(1)
 
-    urls_to_process = []
-    if "/video" in TARGET_URL and "/channels/" not in TARGET_URL:
-        urls_to_process.append(TARGET_URL)
-    else:
-        urls_to_process = get_videos_from_listing(TARGET_URL)
-
-    if not urls_to_process:
-        print("❌ Nenhum vídeo encontrado.")
-        sys.exit(1)
-
-    print(f"🎯 Iniciando processamento de {len(urls_to_process)} vídeo(s)...")
+    print("--- SNIPER ENGINE V3.5 ATIVADA ---")
     
-    success_count = 0
-    for url in urls_to_process:
-        video_data = process_single_video(url, CUSTOM_CAPTION)
-        if video_data:
-            if send_video(video_data):
-                success_count += 1
-            time.sleep(10)
-    
-    if success_count == 0:
-        print("❌ Nenhum vídeo foi enviado com sucesso.")
-        sys.exit(1)
+    links = []
+    try:
+        # Tenta carregar listagem de vídeos (Scrapping de Massa)
+        r = scraper.get(TARGET_URL, headers=HEADERS_PT, timeout=20)
+        soup = BeautifulSoup(r.text, 'html.parser')
+        blocks = soup.find_all('div', class_='thumb-block')
         
-    print(f"🏁 Finalizado! {success_count} vídeo(s) enviado(s) ao grupo.")
+        for b in blocks:
+            if len(links) >= 15: break # Limite de 15 vídeos por disparo
+            try:
+                link_tag = b.find('p', class_='title').find('a')
+                links.append(f"https://www.xvideos.com{link_tag['href']}")
+            except: continue
+    except:
+        # Se falhar a listagem, assume que o link é um vídeo único
+        links = [TARGET_URL]
+
+    if not links:
+        print("⚠️ Nenhum vídeo encontrado para processar.")
+        sys.exit(1)
+
+    print(f"🎯 Total de vídeos para converter: {len(links)}")
+
+    for link in links:
+        try:
+            # Captura o título antes para a legenda
+            r_video = scraper.get(link, headers=HEADERS_PT, timeout=15)
+            soup_video = BeautifulSoup(r_video.text, 'html.parser')
+            title = soup_video.find("meta", property="og:title")["content"]
+            title = title.replace(" - XVIDEOS.COM", "").strip()
+
+            v_url = get_direct_video_url(link)
+            if v_url:
+                video_path = generate_snippet(v_url, duration=3) # Recorte de 3 segundos
+                if video_path:
+                    send_to_telegram({"path": video_path, "titulo": title})
+                    print(f"✅ Sucesso: {title}")
+                    time.sleep(12) # Intervalo anti-spam
+                else:
+                    print(f"⏭️ Falha no recorte: {title}")
+            else:
+                print(f"⏭️ Não foi possível obter stream de: {link}")
+        except Exception as e:
+            print(f"⚠️ Erro ao processar item: {e}")
+            continue
+
+    print("--- OPERAÇÃO FINALIZADA ---")
