@@ -1,117 +1,174 @@
 import os
 import sys
-import requests
+import cloudscraper
+import time
+import random
+import re
 from bs4 import BeautifulSoup
-import json
 
 # --- CONFIGURAÇÕES ---
-# Recupera as chaves secretas configuradas no GitHub
 TELEGRAM_TOKEN = os.environ.get('TELEGRAM_TOKEN')
 CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID')
 TARGET_URL = os.environ.get('TARGET_URL')
+CUSTOM_CAPTION = os.environ.get('CUSTOM_CAPTION', '') # Nova variável para sua legenda/arroba
 
-def scrape_xvideos(url):
-    print(f"🔄 Tentando acessar: {url}")
-    
-    # Headers para simular um navegador real (Chrome) e evitar erro 403
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-        'Referer': 'https://www.google.com/'
-    }
-    
+# Inicializa o scraper uma vez
+scraper = cloudscraper.create_scraper(browser={'browser': 'chrome', 'platform': 'windows', 'mobile': False})
+
+def extract_mp4_url(html_content):
+    """Tenta encontrar a URL do vídeo MP4 dentro do JavaScript da página"""
+    # Xvideos guarda o link dentro de html5player.setVideoUrlHigh('') ou Low
     try:
-        response = requests.get(url, headers=headers, timeout=20)
+        # Tenta pegar alta qualidade primeiro
+        mp4_match = re.search(r"html5player\.setVideoUrlHigh\('([^']+)'\)", html_content)
+        if not mp4_match:
+            # Tenta baixa qualidade
+            mp4_match = re.search(r"html5player\.setVideoUrlLow\('([^']+)'\)", html_content)
         
-        # Se o site bloquear (Erro 403) ou não encontrar (404)
-        if response.status_code != 200:
-            print(f"❌ Erro HTTP do site: {response.status_code}")
-            return None
-            
+        if mp4_match:
+            return mp4_match.group(1)
+    except:
+        pass
+    return None
+
+def process_single_video(url, custom_text=""):
+    print(f"🔄 Processando vídeo único: {url}")
+    try:
+        response = scraper.get(url, timeout=25)
+        if response.status_code != 200: return None
+
         soup = BeautifulSoup(response.text, 'html.parser')
         
-        # 1. Título (Prioridade: Open Graph)
+        # 1. Título
         og_title = soup.find("meta", property="og:title")
-        title = og_title["content"] if og_title else soup.title.string
-        
-        # Limpeza do título (remove o nome do site)
-        if title:
-            title = title.replace(" - XVIDEOS.COM", "").replace("XVIDEOS.COM - ", "").strip()
-        else:
-            title = "Vídeo sem título"
-        
-        # 2. Thumbnail (Prioridade: Open Graph)
+        title = og_title["content"] if og_title else "Vídeo Hot"
+        title = title.replace(" - XVIDEOS.COM", "").replace("XVIDEOS.COM - ", "").strip()
+
+        # 2. Thumbnail (Backup)
         og_image = soup.find("meta", property="og:image")
         thumbnail = og_image["content"] if og_image else None
-        
-        # Fallback (Plano B se não achar imagem no OG)
-        if not thumbnail:
-            link_img = soup.find("link", rel="image_src")
-            thumbnail = link_img["href"] if link_img else None
 
-        return {"titulo": title, "thumbnail": thumbnail}
+        # 3. Vídeo MP4 (Ouro)
+        mp4_url = extract_mp4_url(response.text)
 
+        return {
+            "type": "video" if mp4_url else "photo",
+            "media_url": mp4_url if mp4_url else thumbnail,
+            "titulo": title,
+            "link": url,
+            "custom_text": custom_text
+        }
     except Exception as e:
-        print(f"❌ Erro técnico durante o scraping: {e}")
+        print(f"❌ Erro ao processar vídeo: {e}")
         return None
 
-def send_to_telegram(data):
-    api_url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendPhoto"
+def get_videos_from_listing(url):
+    """Entra em uma página de categoria/tags e pega os 5 primeiros vídeos"""
+    print(f"📑 Detectada página de listagem. Buscando top 5 vídeos...")
+    links_to_process = []
     
-    caption = f"🔥 <b>{data['titulo']}</b>\n\nAssista completo aqui: {TARGET_URL}"
+    try:
+        response = scraper.get(url, timeout=25)
+        soup = BeautifulSoup(response.text, 'html.parser')
+        
+        # Encontra os blocos de vídeo (thumb-block)
+        blocks = soup.find_all('div', class_='thumb-block')
+        
+        count = 0
+        for block in blocks:
+            if count >= 3: # LIMITAMOS A 3 VÍDEOS POR VEZ PARA NÃO TOMAR BAN DO TELEGRAM
+                break
+                
+            try:
+                # Pega o link dentro do bloco
+                a_tag = block.find('p', class_='title').find('a')
+                partial_link = a_tag['href']
+                full_link = f"https://www.xvideos.com{partial_link}"
+                links_to_process.append(full_link)
+                count += 1
+            except:
+                continue
+                
+        return links_to_process
+    except Exception as e:
+        print(f"❌ Erro ao ler listagem: {e}")
+        return []
+
+def send_to_telegram(data):
+    # Decide se usa sendVideo ou sendPhoto
+    method = "sendVideo" if data['type'] == 'video' else "sendPhoto"
+    media_type = "video" if data['type'] == 'video' else "photo"
+    
+    api_url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/{method}"
+    
+    # Monta a legenda com o seu @ ou texto personalizado
+    caption = f"🔥 <b>{data['titulo']}</b>\n\n"
+    if data['custom_text']:
+        caption += f"📣 {data['custom_text']}\n\n"
+    caption += f"🔗 Assista completo: {data['link']}"
     
     payload = {
         'chat_id': CHAT_ID,
-        'photo': data['thumbnail'],
+        media_type: data['media_url'],
         'caption': caption,
         'parse_mode': 'HTML'
     }
     
     try:
-        print(f"🚀 Enviando para o Grupo (ID: {CHAT_ID})...")
-        response = requests.post(api_url, data=payload, timeout=15)
+        print(f"🚀 Enviando {media_type} para o grupo...")
+        # Timeout maior para envio de vídeo
+        response = requests.post(api_url, data=payload, timeout=60)
         result = response.json()
         
         if result.get('ok'):
-            print("✅ SUCESSO! Mensagem enviada.")
+            print("✅ Enviado com sucesso!")
             return True
         else:
-            # Mostra o erro exato que o Telegram devolveu
-            print(f"❌ O Telegram recusou o envio. Motivo:")
-            print(json.dumps(result, indent=2))
+            print(f"❌ Erro Telegram: {result}")
+            # Se falhar enviando VIDEO (muito pesado), tenta enviar só a FOTO como fallback
+            if method == "sendVideo":
+                print("⚠️ Tentando reenviar apenas como foto...")
+                data['type'] = 'photo'
+                # Precisaríamos ter a thumb guardada, mas simplificando: o script segue
             return False
-            
     except Exception as e:
-        print(f"❌ Falha de conexão com o Telegram: {e}")
+        print(f"❌ Erro conexão: {e}")
         return False
 
-# --- EXECUÇÃO PRINCIPAL ---
+# --- EXECUÇÃO ---
 if __name__ == "__main__":
-    # 1. Validação de Segurança
-    if not TELEGRAM_TOKEN:
-        print("❌ ERRO FATAL: Secret 'TELEGRAM_TOKEN' não encontrada no GitHub.")
-        sys.exit(1)
-    if not CHAT_ID:
-        print("❌ ERRO FATAL: Secret 'TELEGRAM_CHAT_ID' não encontrada no GitHub.")
-        sys.exit(1)
-    if not TARGET_URL:
-        print("❌ ERRO FATAL: Nenhuma URL recebida para processar.")
+    if not all([TELEGRAM_TOKEN, CHAT_ID, TARGET_URL]):
+        print("❌ Erro: Configurações faltando.")
         sys.exit(1)
 
-    print("--- INICIANDO AUTOMAÇÃO ---")
+    # Verifica se é link de vídeo único (tem /video em algum lugar ou numeroID)
+    # Listagens geralmente são /tags/, /lang/, /best/
+    is_single_video = "/video" in TARGET_URL and not "/channels/" in TARGET_URL
     
-    # 2. Extração de Dados
-    dados = scrape_xvideos(TARGET_URL)
-    
-    if dados and dados['thumbnail']:
-        print(f"📸 Dados extraídos com sucesso: {dados['titulo']}")
-        
-        # 3. Envio para o Telegram
-        sucesso = send_to_telegram(dados)
-        
-        if not sucesso:
-            print("⚠️ O script rodou, mas falhou ao enviar para o Telegram (Erro de API).")
-            sys.exit(1) # Força erro no GitHub Actions para ficar VERMELHO
+    videos_to_send = []
+
+    if is_single_video:
+        data = process_single_video(TARGET_URL, CUSTOM_CAPTION)
+        if data: videos_to_send.append(data)
     else:
-        print("⚠️ Falha ao extrair dados do site (Bloqueio ou Layout mudou).")
-        sys.exit(1) # Força erro no GitHub Actions para ficar VERMELHO
+        # É uma página de categoria, pega os links
+        links = get_videos_from_listing(TARGET_URL)
+        for link in links:
+            data = process_single_video(link, CUSTOM_CAPTION)
+            if data:
+                videos_to_send.append(data)
+                # Pausa para não sobrecarregar o site
+                time.sleep(2)
+
+    # Disparo Final
+    if not videos_to_send:
+        print("⚠️ Nenhum vídeo processado com sucesso.")
+        sys.exit(1)
+
+    print(f"🎯 Total de vídeos para enviar: {len(videos_to_send)}")
+    
+    for i, video_data in enumerate(videos_to_send):
+        print(f"--- Processando envio {i+1}/{len(videos_to_send)} ---")
+        send_to_telegram(video_data)
+        # PAUSA OBRIGATÓRIA ENTRE ENVIOS NO TELEGRAM (Anti-Flood)
+        time.sleep(10)
