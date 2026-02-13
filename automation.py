@@ -5,6 +5,7 @@ import time
 import requests
 import json
 import re
+import subprocess  # Necessário para rodar o comando de corte (ffmpeg)
 from bs4 import BeautifulSoup
 
 # --- CONFIGURAÇÕES ---
@@ -13,7 +14,14 @@ CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID')
 TARGET_URL = os.environ.get('TARGET_URL')
 CUSTOM_CAPTION = os.environ.get('CUSTOM_CAPTION', '')
 
+# Configura o scraper simulando um navegador
 scraper = cloudscraper.create_scraper(browser={'browser': 'chrome', 'platform': 'windows', 'mobile': False})
+
+# Cabeçalhos para FORÇAR o conteúdo em Português
+HEADERS_PT = {
+    'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
+    'Referer': 'https://www.google.com/'
+}
 
 def extract_mp4_url(html_content):
     """Tenta encontrar a URL do vídeo MP4"""
@@ -27,10 +35,46 @@ def extract_mp4_url(html_content):
         pass
     return None
 
+def generate_snippet(video_url, duration=45):
+    """
+    Usa o FFmpeg para baixar e cortar os primeiros X segundos do vídeo.
+    Retorna o caminho do arquivo local ou None se falhar.
+    """
+    output_file = f"snippet_{int(time.time())}.mp4"
+    print(f"✂️ Gerando recorte de {duration} segundos...")
+    
+    # Comando FFmpeg otimizado para corte rápido e leve
+    # -ss 0: começa do início
+    # -t duration: duração do corte
+    # -preset ultrafast: converte muito rápido para não gastar tempo do GitHub
+    cmd = [
+        'ffmpeg', '-y', '-hide_banner', '-loglevel', 'error',
+        '-i', video_url,
+        '-t', str(duration),
+        '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '28', # Re-encode leve
+        '-c:a', 'aac', '-b:a', '64k',
+        output_file
+    ]
+    
+    try:
+        # Executa o corte (timeout de 2 min para segurança)
+        subprocess.run(cmd, check=True, timeout=120)
+        
+        # Verifica se o arquivo foi criado e tem tamanho válido
+        if os.path.exists(output_file) and os.path.getsize(output_file) > 1000:
+            print(f"✅ Recorte gerado: {output_file}")
+            return output_file
+    except Exception as e:
+        print(f"⚠️ Falha ao gerar recorte: {e}")
+        if os.path.exists(output_file): os.remove(output_file)
+    
+    return None
+
 def process_single_video(url, custom_text=""):
     print(f"🔄 Processando: {url}")
     try:
-        response = scraper.get(url, timeout=25)
+        # Adiciona headers=HEADERS_PT para pegar título em Português
+        response = scraper.get(url, headers=HEADERS_PT, timeout=25)
         if response.status_code != 200: 
             print(f"❌ Erro HTTP {response.status_code}")
             return None
@@ -40,7 +84,6 @@ def process_single_video(url, custom_text=""):
         # Título
         og_title = soup.find("meta", property="og:title")
         title = og_title["content"] if og_title else "Vídeo Hot"
-        # Limpeza padrão
         title = title.replace(" - XVIDEOS.COM", "").replace("XVIDEOS.COM - ", "").strip()
 
         # Thumbnail
@@ -49,11 +92,15 @@ def process_single_video(url, custom_text=""):
         
         # Vídeo MP4
         mp4_url = extract_mp4_url(response.text)
+        
+        # Se achou MP4, tenta gerar o recorte físico
+        local_video_path = None
+        if mp4_url:
+            local_video_path = generate_snippet(mp4_url)
 
-        # RETORNA AMBOS (Vídeo e Foto) para ter Plano B
         return {
-            "type": "video" if mp4_url else "photo",
-            "video_url": mp4_url,
+            "type": "video" if local_video_path else "photo",
+            "video_path": local_video_path, # Caminho do arquivo no disco
             "photo_url": thumbnail,
             "titulo": title,
             "link": url,
@@ -65,16 +112,16 @@ def process_single_video(url, custom_text=""):
 
 def get_videos_from_listing(url):
     """Busca vídeos em páginas de categoria"""
-    print(f"📑 Lendo lista de vídeos...")
+    print(f"📑 Lendo lista de vídeos (PT-BR)...")
     links = []
     try:
-        response = scraper.get(url, timeout=25)
+        response = scraper.get(url, headers=HEADERS_PT, timeout=25)
         soup = BeautifulSoup(response.text, 'html.parser')
         blocks = soup.find_all('div', class_='thumb-block')
         
         count = 0
         for block in blocks:
-            if count >= 5: break # AUMENTADO PARA 5 VÍDEOS
+            if count >= 5: break 
             try:
                 a_tag = block.find('p', class_='title').find('a')
                 full_link = f"https://www.xvideos.com{a_tag['href']}"
@@ -86,45 +133,53 @@ def get_videos_from_listing(url):
         print(f"❌ Erro lista: {e}")
         return []
 
-def send_payload(method, payload):
+def send_payload(method, payload, files=None):
     """Função auxiliar para envio"""
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/{method}"
     try:
-        r = requests.post(url, data=payload, timeout=60)
+        # Se tiver arquivos (video), usa multipart upload
+        if files:
+            r = requests.post(url, data=payload, files=files, timeout=120)
+        else:
+            r = requests.post(url, data=payload, timeout=60)
         return r.json()
     except Exception as e:
         return {'ok': False, 'description': str(e)}
 
 def smart_send(data):
-    """Tenta enviar vídeo, se falhar, envia foto"""
+    """Envia recorte de vídeo ou foto"""
     
-    # LEGENDA LIMPA: Apenas Título (com link embutido) e Texto Personalizado
-    # O link do vídeo fica "escondido" no título clicável
+    # Legenda com Título em Português
     caption = f"🇧🇷 <a href=\"{data['link']}\"><b>{data['titulo']}</b></a>"
-    
     if data['custom_text']:
         caption += f"\n\n📣 {data['custom_text']}"
 
-    # TENTATIVA 1: Enviar Vídeo (Se existir)
-    if data['type'] == 'video' and data['video_url']:
-        print("🎥 Tentando enviar vídeo MP4...")
-        res = send_payload('sendVideo', {
-            'chat_id': CHAT_ID,
-            'video': data['video_url'],
-            'caption': caption,
-            'parse_mode': 'HTML'
-        })
-        
-        if res.get('ok'):
-            print("✅ Vídeo enviado com sucesso!")
-            return True
-        else:
-            print(f"⚠️ Falha ao enviar vídeo: {res.get('description')}")
-            print("🔄 Ativando PLANO B: Enviar Foto...")
+    # TENTATIVA 1: Enviar Recorte de Vídeo (Arquivo Local)
+    if data['type'] == 'video' and data['video_path']:
+        print("🎥 Enviando recorte MP4 para o Telegram...")
+        try:
+            with open(data['video_path'], 'rb') as video_file:
+                res = send_payload('sendVideo', {
+                    'chat_id': CHAT_ID,
+                    'caption': caption,
+                    'parse_mode': 'HTML',
+                    'supports_streaming': 'true'
+                }, files={'video': video_file})
+            
+            # Limpa o arquivo depois de tentar enviar
+            os.remove(data['video_path'])
+            
+            if res.get('ok'):
+                print("✅ Recorte enviado com sucesso!")
+                return True
+            else:
+                print(f"⚠️ Falha ao enviar vídeo: {res.get('description')}")
+        except Exception as e:
+            print(f"⚠️ Erro ao ler arquivo de vídeo: {e}")
 
-    # TENTATIVA 2: Enviar Foto (Fallback ou Padrão)
+    # TENTATIVA 2: Enviar Foto (Fallback)
     if data['photo_url']:
-        print("📸 Enviando Thumbnail...")
+        print("🔄 Fallback: Enviando Thumbnail...")
         res = send_payload('sendPhoto', {
             'chat_id': CHAT_ID,
             'photo': data['photo_url'],
@@ -135,9 +190,6 @@ def smart_send(data):
         if res.get('ok'):
             print("✅ Foto enviada com sucesso!")
             return True
-        else:
-            print(f"❌ Falha ao enviar foto: {res.get('description')}")
-            return False
             
     return False
 
@@ -146,9 +198,7 @@ if __name__ == "__main__":
         print("❌ Configurações faltando.")
         sys.exit(1)
 
-    # Lógica de seleção (Lista ou Único)
     urls_to_process = []
-    # Detecta se é video unico pela URL
     if "/video" in TARGET_URL and "/channels/" not in TARGET_URL:
         urls_to_process.append(TARGET_URL)
     else:
@@ -166,10 +216,8 @@ if __name__ == "__main__":
         if data:
             if smart_send(data):
                 success_count += 1
-            # Pausa para não tomar flood
             time.sleep(5)
     
-    # Se nenhum envio deu certo, marca o GitHub como falha
     if success_count == 0:
         print("❌ Todos os envios falharam.")
         sys.exit(1)
