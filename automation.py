@@ -104,9 +104,10 @@ def get_direct_video_url(page_url):
         
     return None
 
-def generate_snippet(video_direct_url, duration=30):
+def generate_snippet(video_direct_url, duration=3):
     """
     Gera um recorte do vídeo usando FFmpeg. 
+    Reduzido para 3 segundos conforme solicitado.
     """
     output_file = f"video_{int(time.time())}.mp4"
     print(f"✂️ Criando recorte de {duration} segundos...")
@@ -128,7 +129,7 @@ def generate_snippet(video_direct_url, duration=30):
     try:
         subprocess.run(cmd, check=True, timeout=300)
         
-        if os.path.exists(output_file) and os.path.getsize(output_file) > 10000:
+        if os.path.exists(output_file) and os.path.getsize(output_file) > 1000:
             print(f"✅ Recorte pronto: {os.path.getsize(output_file) // 1024} KB")
             return output_file
         else:
@@ -152,7 +153,7 @@ def process_single_video(url, custom_text=""):
         video_direct_url = get_direct_video_url(url)
         
         if video_direct_url:
-            local_video_path = generate_snippet(video_direct_url)
+            local_video_path = generate_snippet(video_direct_url, duration=3)
             if local_video_path:
                 return {
                     "type": "video",
@@ -179,7 +180,7 @@ def get_videos_from_listing(url):
         
         count = 0
         for block in blocks:
-            if count >= 5: break 
+            if count >= 10: break # LIMITE AUMENTADO PARA 10 VÍDEOS
             try:
                 a_tag = block.find('p', class_='title').find('a')
                 full_link = f"https://www.xvideos.com{a_tag['href']}"
@@ -192,12 +193,22 @@ def get_videos_from_listing(url):
         return []
 
 def send_video(data):
-    """Envia o arquivo de vídeo recortado para o Telegram."""
+    """Envia o arquivo de vídeo recortado para o Telegram com botão."""
     api_url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendVideo"
     
-    caption = f"🇧🇷 <a href=\"{data['link']}\"><b>{data['titulo']}</b></a>"
+    # Título agora é texto simples, sem link embutido
+    caption = f"🇧🇷 <b>{data['titulo']}</b>"
     if data['custom_text']:
         caption += f"\n\n📣 {data['custom_text']}"
+
+    # Configuração do Botão Inline (URL do vídeo)
+    reply_markup = {
+        "inline_keyboard": [
+            [
+                {"text": "🎥 Assistir Vídeo Completo", "url": data['link']}
+            ]
+        ]
+    }
 
     print(f"🚀 Enviando vídeo para o grupo...")
     try:
@@ -206,7 +217,8 @@ def send_video(data):
                 'chat_id': CHAT_ID,
                 'caption': caption,
                 'parse_mode': 'HTML',
-                'supports_streaming': 'true'
+                'supports_streaming': 'true',
+                'reply_markup': json.dumps(reply_markup) # Adiciona o botão
             }
             files = {'video': video_file}
             r = requests.post(api_url, data=payload, files=files, timeout=300)
