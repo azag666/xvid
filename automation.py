@@ -7,21 +7,44 @@ import re
 import subprocess
 
 # --- AUTO-INSTALAÇÃO DE DEPENDÊNCIAS CRÍTICAS ---
+def install_package(package):
+    try:
+        print(f"⬇️ Instalando {package} automaticamente...")
+        subprocess.check_call([sys.executable, "-m", "pip", "install", package])
+    except Exception as e:
+        print(f"❌ Erro ao instalar {package}: {e}")
+
+# Garante yt-dlp
 try:
     import yt_dlp
 except ImportError:
-    print("⬇️ Instalando yt-dlp automaticamente...")
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "yt-dlp"])
+    install_package("yt-dlp")
     import yt_dlp
 
+# Garante cloudscraper
 try:
     import cloudscraper
 except ImportError:
-    print("⬇️ Instalando cloudscraper automaticamente...")
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "cloudscraper"])
+    install_package("cloudscraper")
     import cloudscraper
 
 from bs4 import BeautifulSoup
+
+# --- VERIFICAÇÃO E INSTALAÇÃO DO FFMPEG ---
+def check_ffmpeg():
+    try:
+        subprocess.run(['ffmpeg', '-version'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return True
+    except FileNotFoundError:
+        print("⚠️ FFmpeg não encontrado. Tentando instalar via apt-get...")
+        try:
+            # Em ambientes Debian/Ubuntu (como o GitHub Actions), podemos tentar instalar via sudo apt
+            subprocess.run(['sudo', 'apt-get', 'update', '-y'], check=True)
+            subprocess.run(['sudo', 'apt-get', 'install', 'ffmpeg', '-y'], check=True)
+            return True
+        except Exception as e:
+            print(f"❌ Não foi possível instalar o FFmpeg: {e}")
+            return False
 
 # --- CONFIGURAÇÕES ---
 TELEGRAM_TOKEN = os.environ.get('TELEGRAM_TOKEN')
@@ -84,7 +107,6 @@ def get_direct_video_url(page_url):
 def generate_snippet(video_direct_url, duration=30):
     """
     Gera um recorte do vídeo usando FFmpeg. 
-    Aumentamos a velocidade e reduzimos o bitrate para garantir o envio.
     """
     output_file = f"video_{int(time.time())}.mp4"
     print(f"✂️ Criando recorte de {duration} segundos...")
@@ -93,7 +115,7 @@ def generate_snippet(video_direct_url, duration=30):
     cmd = [
         'ffmpeg', '-y', '-hide_banner', '-loglevel', 'error',
         '-headers', f'User-Agent: {HEADERS_PT["User-Agent"]}\r\nReferer: https://www.xvideos.com/\r\n',
-        '-ss', '00:00:05', # Pula os 5 primeiros segundos (geralmente intro)
+        '-ss', '00:00:05', # Pula os 5 primeiros segundos
         '-t', str(duration),
         '-i', video_direct_url,
         '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '32',
@@ -104,7 +126,6 @@ def generate_snippet(video_direct_url, duration=30):
     ]
     
     try:
-        # Timeout para evitar processos travados
         subprocess.run(cmd, check=True, timeout=300)
         
         if os.path.exists(output_file) and os.path.getsize(output_file) > 10000:
@@ -121,7 +142,6 @@ def generate_snippet(video_direct_url, duration=30):
 def process_single_video(url, custom_text=""):
     print(f"🔍 Analisando: {url}")
     try:
-        # 1. Pegar título para a legenda
         response = scraper.get(url, headers=HEADERS_PT, timeout=20)
         soup = BeautifulSoup(response.text, 'html.parser')
         
@@ -129,7 +149,6 @@ def process_single_video(url, custom_text=""):
         title = og_title["content"] if og_title else "Vídeo"
         title = title.replace(" - XVIDEOS.COM", "").strip()
 
-        # 2. Obter link direto e gerar recorte
         video_direct_url = get_direct_video_url(url)
         
         if video_direct_url:
@@ -193,7 +212,6 @@ def send_video(data):
             r = requests.post(api_url, data=payload, files=files, timeout=300)
             res = r.json()
             
-        # Limpeza
         os.remove(data['video_path'])
         
         if res.get('ok'):
@@ -211,7 +229,11 @@ if __name__ == "__main__":
         print("❌ Configurações ausentes (TOKEN, ID ou URL).")
         sys.exit(1)
 
-    # Identificar tipo de link
+    # Garante que o FFmpeg esteja instalado antes de começar
+    if not check_ffmpeg():
+        print("❌ Abortando: FFmpeg não disponível.")
+        sys.exit(1)
+
     urls_to_process = []
     if "/video" in TARGET_URL and "/channels/" not in TARGET_URL:
         urls_to_process.append(TARGET_URL)
@@ -230,7 +252,7 @@ if __name__ == "__main__":
         if video_data:
             if send_video(video_data):
                 success_count += 1
-            time.sleep(10) # Pausa entre envios
+            time.sleep(10)
     
     if success_count == 0:
         print("❌ Nenhum vídeo foi enviado com sucesso.")
