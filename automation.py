@@ -33,59 +33,83 @@ CUSTOM_CAPTION = os.environ.get('CUSTOM_CAPTION', '')
 # Configura o scraper simulando um navegador
 scraper = cloudscraper.create_scraper(browser={'browser': 'chrome', 'platform': 'windows', 'mobile': False})
 
-# Cabeçalhos para FORÇAR o conteúdo em Português (apenas para o Título)
+# Cabeçalhos para FORÇAR o conteúdo em Português
 HEADERS_PT = {
     'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
     'Referer': 'https://www.google.com/'
 }
 
 def get_direct_video_url(page_url):
     """
-    Usa yt-dlp para extrair a URL direta do vídeo (MP4 ou HLS).
-    Muito mais robusto que Regex.
+    Usa yt-dlp para extrair a URL direta do vídeo.
+    Adicionamos headers extras para evitar bloqueios.
     """
     print("🕵️‍♂️ Extraindo link real do vídeo com yt-dlp...")
     
     ydl_opts = {
         'quiet': True,
         'no_warnings': True,
-        'format': 'best[ext=mp4]/best', # Tenta pegar a melhor qualidade MP4
-        'socket_timeout': 10,
+        'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+        'socket_timeout': 15,
+        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
     }
     
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            # extract_info com download=False apenas pega os metadados
             info = ydl.extract_info(page_url, download=False)
-            return info.get('url') # Retorna o link direto do arquivo de vídeo
+            video_url = info.get('url')
+            if video_url:
+                print("✅ Link direto do vídeo obtido!")
+                return video_url
     except Exception as e:
-        print(f"⚠️ Falha no yt-dlp: {e}")
-        return None
+        print(f"⚠️ Erro no yt-dlp: {e}")
+    
+    # Plano B: Tentar extrair via Regex se o yt-dlp falhar
+    print("🔄 Tentando Plano B (Regex)...")
+    try:
+        response = scraper.get(page_url, headers=HEADERS_PT, timeout=20)
+        html = response.text
+        # Procura por links de alta ou baixa qualidade no JS da página
+        match = re.search(r"html5player\.setVideoUrlHigh\('([^']+)'\)", html)
+        if not match:
+            match = re.search(r"html5player\.setVideoUrlLow\('([^']+)'\)", html)
+        
+        if match:
+            print("✅ Link extraído via Regex!")
+            return match.group(1)
+    except Exception as e:
+        print(f"⚠️ Erro no Plano B: {e}")
+        
+    return None
 
 def generate_snippet(video_direct_url, duration=45):
     """
-    Usa o FFmpeg para baixar e cortar os primeiros X segundos do vídeo.
+    Usa o FFmpeg para criar um recorte leve dos primeiros segundos.
+    Otimizado para ser rápido.
     """
     output_file = f"snippet_{int(time.time())}.mp4"
     print(f"✂️ Gerando recorte de {duration} segundos...")
     
-    # Adicionamos -headers para garantir que o ffmpeg consiga ler se o link pedir
+    # Comando FFmpeg otimizado
+    # -t duration ANTES de -i faz o ffmpeg ler apenas o necessário do stream
     cmd = [
         'ffmpeg', '-y', '-hide_banner', '-loglevel', 'error',
-        '-headers', 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64)', 
-        '-i', video_direct_url,
+        '-headers', f'User-Agent: {HEADERS_PT["User-Agent"]}\r\nReferer: https://www.xvideos.com/\r\n',
         '-t', str(duration),
-        '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '28',
+        '-i', video_direct_url,
+        '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '30',
         '-c:a', 'aac', '-b:a', '64k',
+        '-movflags', '+faststart',
         output_file
     ]
     
     try:
-        # Timeout aumentado para 3 minutos, pois baixar vídeo demora
-        subprocess.run(cmd, check=True, timeout=180)
+        # Timeout de 4 minutos para o download/corte
+        subprocess.run(cmd, check=True, timeout=240)
         
-        if os.path.exists(output_file) and os.path.getsize(output_file) > 1000:
-            print(f"✅ Recorte gerado com sucesso: {output_file}")
+        if os.path.exists(output_file) and os.path.getsize(output_file) > 5000:
+            print(f"✅ Recorte gerado: {os.path.getsize(output_file) // 1024} KB")
             return output_file
     except Exception as e:
         print(f"⚠️ Falha no FFmpeg: {e}")
@@ -96,7 +120,7 @@ def generate_snippet(video_direct_url, duration=45):
 def process_single_video(url, custom_text=""):
     print(f"🔄 Processando página: {url}")
     try:
-        # 1. Pega Título e Thumb usando CloudScraper (para garantir PT-BR)
+        # 1. Pega metadados básicos
         response = scraper.get(url, headers=HEADERS_PT, timeout=25)
         soup = BeautifulSoup(response.text, 'html.parser')
         
@@ -107,7 +131,7 @@ def process_single_video(url, custom_text=""):
         og_image = soup.find("meta", property="og:image")
         thumbnail = og_image["content"] if og_image else None
         
-        # 2. Pega URL do Vídeo usando yt-dlp (Blindado)
+        # 2. Pega URL real do Vídeo
         video_direct_url = get_direct_video_url(url)
         
         # 3. Gera o recorte se conseguiu o link
@@ -126,7 +150,7 @@ def process_single_video(url, custom_text=""):
             "custom_text": custom_text
         }
     except Exception as e:
-        print(f"❌ Erro geral: {e}")
+        print(f"❌ Erro geral ao processar: {e}")
         return None
 
 def get_videos_from_listing(url):
@@ -149,14 +173,14 @@ def get_videos_from_listing(url):
             except: continue
         return links
     except Exception as e:
-        print(f"❌ Erro lista: {e}")
+        print(f"❌ Erro ao ler listagem: {e}")
         return []
 
 def send_payload(method, payload, files=None):
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/{method}"
     try:
         if files:
-            r = requests.post(url, data=payload, files=files, timeout=120)
+            r = requests.post(url, data=payload, files=files, timeout=180)
         else:
             r = requests.post(url, data=payload, timeout=60)
         return r.json()
@@ -164,12 +188,12 @@ def send_payload(method, payload, files=None):
         return {'ok': False, 'description': str(e)}
 
 def smart_send(data):
-    # Legenda Clean
+    # Legenda Clean com Título linkado
     caption = f"🇧🇷 <a href=\"{data['link']}\"><b>{data['titulo']}</b></a>"
     if data['custom_text']:
         caption += f"\n\n📣 {data['custom_text']}"
 
-    # Prioridade: Vídeo
+    # Prioridade 1: Enviar Recorte de Vídeo
     if data['type'] == 'video' and data['video_path']:
         print("🎥 Enviando vídeo para o Telegram...")
         try:
@@ -184,16 +208,17 @@ def smart_send(data):
             os.remove(data['video_path'])
             
             if res.get('ok'):
-                print("✅ Vídeo enviado!")
+                print("✅ Vídeo enviado com sucesso!")
                 return True
             else:
                 print(f"⚠️ Erro Telegram (Vídeo): {res.get('description')}")
+                print("🔄 Tentando Fallback para Foto...")
         except Exception as e:
-            print(f"⚠️ Erro arquivo: {e}")
+            print(f"⚠️ Erro ao manipular arquivo de vídeo: {e}")
 
-    # Fallback: Foto
+    # Prioridade 2: Enviar Foto (Fallback ou se não houver vídeo)
     if data['photo_url']:
-        print("🔄 Enviando Foto (Fallback)...")
+        print("📸 Enviando Foto...")
         res = send_payload('sendPhoto', {
             'chat_id': CHAT_ID,
             'photo': data['photo_url'],
@@ -202,14 +227,16 @@ def smart_send(data):
         })
         
         if res.get('ok'):
-            print("✅ Foto enviada!")
+            print("✅ Foto enviada com sucesso!")
             return True
+        else:
+            print(f"❌ Falha no Telegram (Foto): {res.get('description')}")
             
     return False
 
 if __name__ == "__main__":
     if not all([TELEGRAM_TOKEN, CHAT_ID, TARGET_URL]):
-        print("❌ Configurações faltando.")
+        print("❌ Configurações faltando (TOKEN, ID ou URL).")
         sys.exit(1)
 
     urls_to_process = []
@@ -219,10 +246,10 @@ if __name__ == "__main__":
         urls_to_process = get_videos_from_listing(TARGET_URL)
 
     if not urls_to_process:
-        print("❌ Nenhum link encontrado.")
+        print("❌ Nenhum vídeo encontrado no link fornecido.")
         sys.exit(1)
 
-    print(f"🎯 Processando {len(urls_to_process)} itens...")
+    print(f"🎯 Iniciando processamento de {len(urls_to_process)} vídeo(s)...")
     
     success_count = 0
     for url in urls_to_process:
@@ -230,10 +257,11 @@ if __name__ == "__main__":
         if data:
             if smart_send(data):
                 success_count += 1
-            time.sleep(5)
+            # Pausa para evitar bloqueio do Telegram
+            time.sleep(7)
     
     if success_count == 0:
-        print("❌ Todos os envios falharam.")
+        print("❌ Nenhum envio foi concluído com sucesso.")
         sys.exit(1)
         
-    print(f"🏁 Finalizado. {success_count}/{len(urls_to_process)} enviados.")
+    print(f"🏁 Finalizado! Sucessos: {success_count}/{len(urls_to_process)}")
