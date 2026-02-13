@@ -9,8 +9,12 @@ on:
   workflow_dispatch:
     inputs:
       video_url:
-        description: 'Cole a URL do vídeo aqui'
+        description: 'Cole a URL (Vídeo ou Categoria)'
         required: true
+        type: string
+      caption_text:
+        description: 'Texto Extra / @SeuCanal'
+        required: false
         type: string
 
 jobs:
@@ -26,8 +30,9 @@ jobs:
           python-version: '3.9'
 
       - name: Instalar bibliotecas necessárias
+        # Adicionamos 'cloudscraper' aqui para garantir que funcione mesmo sem requirements.txt atualizado
         run: |
-          pip install requests beautifulsoup4
+          pip install requests beautifulsoup4 cloudscraper
 
       - name: Executar Robô
         env:
@@ -37,4 +42,7 @@ jobs:
           
           # Pega a URL vinda do site (payload) OU do input manual (workflow_dispatch)
           TARGET_URL: ${{ github.event.client_payload.video_url || inputs.video_url }}
+          
+          # Pega a Legenda vinda do site (payload) OU do input manual
+          CUSTOM_CAPTION: ${{ github.event.client_payload.caption_text || inputs.caption_text }}
         run: python automation.py
