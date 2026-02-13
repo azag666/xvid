@@ -4,124 +4,120 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Painel de Disparo Pro v2.2</title>
+<title>Bot Sender Monetizze v3.0</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
 <style>
 body { background-color: #0f172a; color: #e2e8f0; }
-.glass { background: rgba(30, 41, 59, 0.85); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.1); }
+.glass { background: rgba(15, 23, 42, 0.9); backdrop-filter: blur(16px); border: 1px solid rgba(239, 68, 68, 0.2); }
 .loader { border-top-color: #ef4444; -webkit-animation: spinner 1.5s linear infinite; animation: spinner 1.5s linear infinite; }
 @keyframes spinner { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 .bg-pattern {
-background-image: radial-gradient(circle at 1px 1px, rgba(255,255,255,0.05) 1px, transparent 0);
-background-size: 20px 20px;
+background-image: radial-gradient(circle at 1px 1px, rgba(239, 68, 68, 0.1) 1px, transparent 0);
+background-size: 24px 24px;
 }
+.btn-gold { background: linear-gradient(135deg, #fbbf24 0%, #d97706 100%); }
 </style>
 </head>
 <body class="h-screen flex items-center justify-center p-4 bg-slate-900 bg-pattern">
 
-<div class="glass max-w-md w-full p-8 rounded-2xl shadow-2xl relative overflow-hidden">
+<div class="glass max-w-lg w-full p-8 rounded-3xl shadow-[0_0_50px_rgba(239,68,68,0.2)] relative overflow-hidden">
     
-    <!-- Cabeçalho -->
-    <div class="text-center mb-6 relative z-10">
-        <div class="bg-gradient-to-br from-red-600 to-red-800 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-3 shadow-lg shadow-red-500/30">
-            <i class="fa-solid fa-play text-2xl text-white"></i>
+    <!-- Cabeçalho de Monetização -->
+    <div class="text-center mb-8 relative z-10">
+        <div class="bg-red-600 w-20 h-20 rounded-2xl rotate-12 flex items-center justify-center mx-auto mb-4 shadow-xl shadow-red-600/40">
+            <i class="fa-solid fa-dollar-sign text-3xl text-white -rotate-12"></i>
         </div>
-        <h1 class="text-2xl font-bold text-white tracking-tight">Bot Sender <span class="text-red-500">Pro</span></h1>
-        <p class="text-slate-400 text-xs mt-1">Automação: Recortes de 3s e Botões Inline</p>
+        <h1 class="text-3xl font-black text-white tracking-tighter italic uppercase">Money <span class="text-red-500 text-shadow">Sniper</span></h1>
+        <p class="text-slate-400 text-sm font-medium">Transforme recortes de 3s em vendas automáticas</p>
+        <div class="flex justify-center gap-2 mt-2">
+            <span class="bg-green-500/10 text-green-400 text-[10px] px-2 py-0.5 rounded-full border border-green-500/20 font-bold uppercase">Unitário: R$ 3,99</span>
+            <span class="bg-yellow-500/10 text-yellow-400 text-[10px] px-2 py-0.5 rounded-full border border-yellow-500/20 font-bold uppercase">Vitalício: R$ 19,99</span>
+        </div>
     </div>
 
-    <form id="disparoForm" class="space-y-5 relative z-10">
+    <form id="disparoForm" class="space-y-4 relative z-10">
         
-        <!-- Área de Configuração (Oculta por padrão) -->
-        <div id="configArea" class="hidden absolute inset-0 bg-slate-900/98 z-20 flex flex-col justify-center p-6 rounded-2xl">
-            <div class="text-center mb-4">
-                <h3 class="text-white font-bold text-lg"><i class="fa-solid fa-gears mr-2 text-red-500"></i>Configuração GitHub</h3>
+        <!-- Configuração API -->
+        <div id="configArea" class="hidden absolute inset-0 bg-slate-950/95 z-30 flex flex-col justify-center p-8 rounded-3xl border border-red-500/30">
+            <h3 class="text-white font-black text-xl mb-6 flex items-center gap-2"><i class="fa-solid fa-key text-red-500"></i> ACESSO AO REPO</h3>
+            <div class="space-y-4">
+                <input type="text" id="ghUser" placeholder="Usuário GitHub" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-sm focus:border-red-500 outline-none">
+                <input type="text" id="ghRepo" placeholder="Nome do Repositório" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-sm focus:border-red-500 outline-none">
+                <input type="password" id="ghToken" placeholder="Token Pessoal (PAT)" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-sm focus:border-red-500 outline-none">
             </div>
-            
-            <div class="space-y-3">
-                <div>
-                    <label class="text-xs font-bold text-slate-500 uppercase">Utilizador GitHub</label>
-                    <input type="text" id="ghUser" placeholder="Ex: azag666" class="w-full bg-slate-800 border border-slate-700 rounded p-2 text-sm text-white focus:border-red-500 focus:outline-none">
-                </div>
-                <div>
-                    <label class="text-xs font-bold text-slate-500 uppercase">Nome do Repo</label>
-                    <input type="text" id="ghRepo" placeholder="Ex: xvid" class="w-full bg-slate-800 border border-slate-700 rounded p-2 text-sm text-white focus:border-red-500 focus:outline-none">
-                </div>
-                <div>
-                    <label class="text-xs font-bold text-slate-500 uppercase">Token (PAT)</label>
-                    <input type="password" id="ghToken" placeholder="ghp_..." class="w-full bg-slate-800 border border-slate-700 rounded p-2 text-sm text-white focus:border-red-500 focus:outline-none">
-                </div>
-            </div>
-
-            <div class="mt-6 flex gap-2">
-                <button type="button" onclick="toggleConfig()" class="flex-1 bg-slate-700 text-white p-2 rounded hover:bg-slate-600 transition-colors text-sm">Voltar</button>
-                <button type="button" onclick="saveConfig()" class="flex-1 bg-red-600 text-white p-2 rounded hover:bg-red-700 transition-colors text-sm font-bold">Guardar</button>
+            <div class="mt-8 flex gap-3">
+                <button type="button" onclick="toggleConfig()" class="flex-1 bg-slate-800 text-slate-400 p-3 rounded-xl hover:bg-slate-700 font-bold transition-all">VOLTAR</button>
+                <button type="button" onclick="saveConfig()" class="flex-1 bg-red-600 text-white p-3 rounded-xl hover:bg-red-700 font-bold shadow-lg shadow-red-600/30 transition-all">SALVAR</button>
             </div>
         </div>
 
-        <!-- Input URL -->
+        <!-- Link do Scraping -->
         <div>
-            <label class="block text-xs font-bold text-slate-300 mb-1 uppercase tracking-wider">URL (Vídeo ou Listagem)</label>
+            <label class="block text-xs font-black text-slate-400 mb-2 uppercase tracking-widest">URL de Extração (Link ou Categoria)</label>
             <div class="relative group">
-                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <i class="fa-solid fa-link text-slate-500 group-focus-within:text-red-500 transition-colors"></i>
+                <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                    <i class="fa-solid fa-magnifying-glass text-red-500"></i>
                 </div>
                 <input type="url" id="videoUrl" required
-                    class="w-full bg-slate-800/50 border border-slate-600 text-white text-sm rounded-lg focus:ring-red-500 focus:border-red-500 block w-full pl-10 p-3 shadow-sm transition-all" 
-                    placeholder="https://www.xvideos.com/...">
+                    class="w-full bg-slate-800/50 border border-slate-700 text-white text-sm rounded-2xl focus:ring-2 focus:ring-red-500 focus:border-transparent block w-full pl-12 p-4 transition-all" 
+                    placeholder="Link do Xvideos...">
             </div>
         </div>
 
-        <!-- Input Legenda -->
+        <!-- Link do Checkout (O NOVO CAMPO) -->
         <div>
-            <label class="block text-xs font-bold text-slate-300 mb-1 uppercase tracking-wider">Legenda / @Canal</label>
+            <label class="block text-xs font-black text-slate-400 mb-2 uppercase tracking-widest">Link de Destino (Checkout / WhatsApp / Pix)</label>
             <div class="relative group">
-                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <i class="fa-solid fa-comment-dots text-slate-500 group-focus-within:text-red-500 transition-colors"></i>
+                <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                    <i class="fa-solid fa-cart-shopping text-yellow-500"></i>
                 </div>
-                <input type="text" id="captionText"
-                    class="w-full bg-slate-800/50 border border-slate-600 text-white text-sm rounded-lg focus:ring-red-500 focus:border-red-500 block w-full pl-10 p-3 shadow-sm transition-all" 
-                    placeholder="Ex: Segue @teucanal">
+                <input type="url" id="checkoutLink" required
+                    class="w-full bg-slate-800/50 border border-slate-700 text-white text-sm rounded-2xl focus:ring-2 focus:ring-yellow-500 focus:border-transparent block w-full pl-12 p-4 transition-all" 
+                    placeholder="Seu link de vendas aqui...">
             </div>
         </div>
 
-        <!-- Rodapé e Botão -->
-        <div class="pt-2">
-            <div class="flex justify-between items-center text-xs mb-4">
-                <button type="button" onclick="toggleConfig()" class="text-slate-400 hover:text-white underline transition-colors flex items-center gap-1">
-                    <i class="fa-solid fa-wrench"></i> Configurar API
-                </button>
-                <span class="text-slate-600 font-mono">v2.2-stable</span>
-            </div>
+        <!-- Legenda -->
+        <div>
+            <label class="block text-xs font-black text-slate-400 mb-2 uppercase tracking-widest">Chamada para Ação (CTA)</label>
+            <input type="text" id="captionText"
+                class="w-full bg-slate-800/50 border border-slate-700 text-white text-sm rounded-2xl focus:ring-2 focus:ring-red-500 p-4 transition-all" 
+                placeholder="Ex: ACESSO VITALÍCIO R$ 19,99">
+        </div>
 
-            <button type="submit" id="btnEnviar" 
-                class="w-full text-white bg-gradient-to-r from-red-600 to-red-800 hover:from-red-500 hover:to-red-700 focus:ring-4 focus:outline-none focus:ring-red-900 font-bold rounded-lg text-sm px-5 py-3.5 text-center shadow-lg transition-all transform hover:scale-[1.02] active:scale-95 disabled:opacity-70">
-                <span id="btnText" class="flex items-center justify-center gap-2">
-                    INICIAR SCRAPPING <i class="fa-solid fa-fire"></i>
-                </span>
-                <div id="loadingSpinner" class="hidden flex items-center justify-center gap-2">
-                    <div class="w-4 h-4 border-2 border-white/30 border-t-white rounded-full loader"></div>
-                    <span>A ENVIAR COMANDO...</span>
-                </div>
+        <div class="flex justify-between items-center px-1">
+            <button type="button" onclick="toggleConfig()" class="text-slate-500 hover:text-red-500 text-[10px] font-bold uppercase transition-colors">
+                <i class="fa-solid fa-sliders mr-1"></i> Configurar API
             </button>
+            <span class="text-slate-700 font-bold text-[10px] tracking-widest">MONETIZE ENGINE V3</span>
         </div>
+
+        <button type="submit" id="btnEnviar" 
+            class="w-full text-white bg-gradient-to-r from-red-600 to-red-800 hover:from-red-500 hover:to-red-700 focus:ring-4 focus:outline-none focus:ring-red-900 font-black rounded-2xl text-base px-5 py-5 text-center shadow-2xl transition-all transform hover:scale-[1.02] active:scale-95 disabled:opacity-50">
+            <span id="btnText" class="flex items-center justify-center gap-3">
+                INICIAR CONVERSÃO <i class="fa-solid fa-bolt-lightning"></i>
+            </span>
+            <div id="loadingSpinner" class="hidden flex items-center justify-center gap-3">
+                <div class="w-5 h-5 border-3 border-white/20 border-t-white rounded-full loader"></div>
+                <span>EXTRAINDO E MONETIZANDO...</span>
+            </div>
+        </button>
     </form>
 
-    <div id="statusMsg" class="mt-4 text-center text-xs hidden p-3 rounded-lg font-bold border transition-all"></div>
+    <div id="statusMsg" class="mt-6 text-center text-xs hidden p-4 rounded-xl font-bold border transition-all"></div>
 </div>
 
 <script>
-    // Carregar configurações do localStorage
     window.onload = () => {
         if(localStorage.getItem('ghUser')) document.getElementById('ghUser').value = localStorage.getItem('ghUser');
         if(localStorage.getItem('ghRepo')) document.getElementById('ghRepo').value = localStorage.getItem('ghRepo');
         if(localStorage.getItem('ghToken')) document.getElementById('ghToken').value = localStorage.getItem('ghToken');
+        if(localStorage.getItem('checkoutLink')) document.getElementById('checkoutLink').value = localStorage.getItem('checkoutLink');
     };
 
     function toggleConfig() {
-        const el = document.getElementById('configArea');
-        el.classList.toggle('hidden');
+        document.getElementById('configArea').classList.toggle('hidden');
     }
 
     function saveConfig() {
@@ -134,9 +130,9 @@ background-size: 20px 20px;
             localStorage.setItem('ghRepo', repo);
             localStorage.setItem('ghToken', token);
             toggleConfig();
-            showStatus('Configurações guardadas!', 'success');
+            showStatus('API Configurada!', 'success');
         } else {
-            alert('Preenche todos os campos da API!');
+            alert('Preencha os dados da API!');
         }
     }
 
@@ -147,16 +143,18 @@ background-size: 20px 20px;
         const repo = document.getElementById('ghRepo').value;
         const token = document.getElementById('ghToken').value;
         const url = document.getElementById('videoUrl').value;
+        const checkout = document.getElementById('checkoutLink').value;
         const caption = document.getElementById('captionText').value;
         
         if(!user || !repo || !token) {
-            showStatus('Configura a API primeiro!', 'error');
+            showStatus('⚠️ Configure a API primeiro!', 'error');
             toggleConfig();
             return;
         }
 
+        localStorage.setItem('checkoutLink', checkout);
         setLoading(true);
-        showStatus('A ligar ao motor...', 'info');
+        showStatus('🚀 Robô enviado para o campo de batalha...', 'info');
 
         try {
             const response = await fetch(`https://api.github.com/repos/${user}/${repo}/dispatches`, {
@@ -169,20 +167,21 @@ background-size: 20px 20px;
                     event_type: 'iniciar_disparo',
                     client_payload: {
                         video_url: url,
-                        caption_text: caption
+                        caption_text: caption,
+                        button_link: checkout // Enviando o link de checkout para o robô
                     }
                 })
             });
 
             if (response.status === 204) {
-                showStatus('✅ Sucesso! O robô começou o scrapping de 10 vídeos.', 'success');
+                showStatus('✅ SUCESSO! Scrapping iniciado. Verifique o grupo.', 'success');
                 document.getElementById('videoUrl').value = '';
             } else {
                 const data = await response.json();
-                showStatus(`❌ Erro GitHub: ${data.message}`, 'error');
+                showStatus(`❌ Erro: ${data.message}`, 'error');
             }
         } catch (error) {
-            showStatus(`❌ Erro de Rede: ${error.message}`, 'error');
+            showStatus(`❌ Erro de Conexão: ${error.message}`, 'error');
         } finally {
             setLoading(false);
         }
@@ -192,31 +191,19 @@ background-size: 20px 20px;
         const btn = document.getElementById('btnEnviar');
         const txt = document.getElementById('btnText');
         const spin = document.getElementById('loadingSpinner');
-        
-        if(isLoading) {
-            btn.disabled = true;
-            txt.classList.add('hidden');
-            spin.classList.remove('hidden');
-        } else {
-            btn.disabled = false;
-            txt.classList.remove('hidden');
-            spin.classList.add('hidden');
-        }
+        btn.disabled = isLoading;
+        if(isLoading) { txt.classList.add('hidden'); spin.classList.remove('hidden'); }
+        else { txt.classList.remove('hidden'); spin.classList.add('hidden'); }
     }
 
     function showStatus(msg, type) {
         const el = document.getElementById('statusMsg');
         el.textContent = msg;
-        el.className = 'mt-4 text-center text-xs p-3 rounded-lg font-bold border transition-all ';
+        el.className = 'mt-6 text-center text-xs p-4 rounded-xl font-bold border transition-all ';
         el.classList.remove('hidden');
-
-        if(type === 'error') {
-            el.classList.add('bg-red-500/10', 'text-red-400', 'border-red-500/20');
-        } else if (type === 'success') {
-            el.classList.add('bg-green-500/10', 'text-green-400', 'border-green-500/20');
-        } else {
-            el.classList.add('bg-blue-500/10', 'text-blue-400', 'border-blue-500/20');
-        }
+        if(type === 'error') el.classList.add('bg-red-500/10', 'text-red-400', 'border-red-500/20');
+        else if (type === 'success') el.classList.add('bg-green-500/10', 'text-green-400', 'border-green-500/20');
+        else el.classList.add('bg-blue-500/10', 'text-blue-400', 'border-blue-500/20');
     }
 </script>
 
