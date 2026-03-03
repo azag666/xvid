@@ -87,8 +87,8 @@ def get_direct_video_url(page_url):
         print(f"⚠️ Erro no yt-dlp: {e}")
     return None
 
-def generate_snippet(video_direct_url, duration=3):
-    """Gera um recorte de 3 segundos focado em conversão de vendas."""
+def generate_snippet(video_direct_url, duration=20):
+    """Gera um recorte de 20 segundos focado em conversão de vendas."""
     output_file = f"snippet_{int(time.time())}.mp4"
     print(f"✂️ A criar recorte de {duration} segundos...")
     
@@ -107,7 +107,7 @@ def generate_snippet(video_direct_url, duration=3):
     ]
     
     try:
-        subprocess.run(cmd, check=True, timeout=120)
+        subprocess.run(cmd, check=True, timeout=300) # Timeout aumentado para recortes maiores
         if os.path.exists(output_file) and os.path.getsize(output_file) > 1000:
             print(f"✅ Recorte pronto: {os.path.getsize(output_file) // 1024} KB")
             return output_file
@@ -150,7 +150,7 @@ def send_to_telegram(data):
                 'reply_markup': json.dumps(reply_markup)
             }
             files = {'video': video_file}
-            r = requests.post(api_url, data=payload, files=files, timeout=180)
+            r = requests.post(api_url, data=payload, files=files, timeout=300)
             res = r.json()
             
         os.remove(data['path'])
@@ -191,7 +191,7 @@ if __name__ == "__main__":
         blocks = soup.find_all('div', class_='thumb-block')
         
         for block in blocks:
-            if len(links) >= 15: break # Limite aumentado para 15 vídeos
+            if len(links) >= 20: break # Limite aumentado para 20 vídeos
             try:
                 a_tag = block.find('p', class_='title').find('a')
                 links.append(f"https://www.xvideos.com{a_tag['href']}")
@@ -216,7 +216,8 @@ if __name__ == "__main__":
 
             video_direct_url = get_direct_video_url(url)
             if video_direct_url:
-                local_path = generate_snippet(video_direct_url, duration=3)
+                # Gera o vídeo com 20 segundos
+                local_path = generate_snippet(video_direct_url, duration=20)
                 if local_path:
                     send_to_telegram({"path": local_path, "titulo": title, "link": url})
                     time.sleep(15) # Intervalo anti-spam para o Telegram
