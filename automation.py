@@ -11,8 +11,10 @@ from bs4 import BeautifulSoup
 TELEGRAM_TOKEN = os.environ.get('TELEGRAM_TOKEN')
 CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID')
 TARGET_URL = os.environ.get('TARGET_URL')
-# Link de checkout vindo do painel (ex: PushinPay, Kiwify, etc.)
-BUTTON_LINK = os.environ.get('BUTTON_LINK')
+
+# === COLOQUE O SEU LINK DE CHECKOUT AQUI ===
+# Isso garante que o botão nunca falhe por culpa do painel frontal
+MEU_CHECKOUT = "https://pay.kiwify.com.br/SEU_CHECKOUT_AQUI" 
 
 scraper = cloudscraper.create_scraper(browser={'browser': 'chrome', 'platform': 'windows', 'mobile': False})
 
@@ -46,7 +48,7 @@ def generate_snippet(video_direct_url):
 def send_to_telegram(path, titulo):
     api_url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendVideo"
     
-    # NOVA COPY FOCADA NA OFERTA IRRECUSÁVEL DE R$ 9,99
+    # COPY DA OFERTA IRRECUSÁVEL DE R$ 9,99
     caption = (
         f"🔞 <b>{titulo}</b>\n\n"
         f"🔥 <b>ACESSO VITALÍCIO LIBERADO!</b>\n\n"
@@ -56,16 +58,13 @@ def send_to_telegram(path, titulo):
         f"👇 <b>CLIQUE NO BOTÃO VERDE ABAIXO POR APENAS R$ 9,99</b> 👇"
     )
     
-    # Trata o link de checkout
-    link_final = BUTTON_LINK if BUTTON_LINK and BUTTON_LINK != "none" else "https://t.me/seu_contato"
-    
-    # Encurta o título do vídeo para garantir que cabe no botão do Telegram
+    # Encurta o título do vídeo para garantir que cabe na largura do telemóvel
     titulo_curto = titulo[:18] + "..." if len(titulo) > 18 else titulo
     
-    # BOTÃO ÚNICO CHAMATIVO COM EMOJIS VERDES E REDIRECIONAMENTO URL
+    # BOTÃO ÚNICO CHAMATIVO COM EMOJIS VERDES E REDIRECIONAMENTO FIXO
     reply_markup = {
         "inline_keyboard": [
-            [{"text": f"🟩 ASSISTIR: {titulo_curto} (R$ 9,99) ✅", "url": link_final}]
+            [{"text": f"🟩 ASSISTIR: {titulo_curto} (R$ 9,99) ✅", "url": MEU_CHECKOUT}]
         ]
     }
     
@@ -80,7 +79,7 @@ def send_to_telegram(path, titulo):
     try:
         with open(path, 'rb') as f:
             r = requests.post(api_url, data=payload, files={'video': f}, timeout=60)
-            print(f"Resposta Telegram: {r.text}")
+            print(f"Resposta Telegram: {r.text}") # Este log salva-o se o Telegram bloquear algo!
             return r.json().get('ok')
     except Exception as e:
         print(f"❌ Erro no envio: {e}")
