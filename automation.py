@@ -1,5 +1,5 @@
 def send_to_telegram(data):
-    api_url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendVideo"
+    api_url = f"https://api.telegram.org/bot{8670603961:AAE8GeYVYjuNqpouzE7IZv4Knx6XrIZkxYU}/sendVideo"
     caption = f"🔞 <b>{data['titulo']}</b>\n\n👇 <b>DESBLOQUEIE O VÍDEO COMPLETO ABAIXO</b> 👇"
 
     print(f"🚀 A enviar '{data['titulo']}' para o grupo...")
