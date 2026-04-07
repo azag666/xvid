@@ -6,6 +6,7 @@ import json
 import subprocess
 import cloudscraper
 from bs4 import BeautifulSoup
+import urllib.parse
 
 # Configurações do GitHub Actions
 TELEGRAM_TOKEN = os.environ.get('TELEGRAM_TOKEN')
@@ -17,11 +18,25 @@ MEU_CHECKOUT = "https://telegramvipp.netlify.app/"
 
 scraper = cloudscraper.create_scraper(browser={'browser': 'chrome', 'platform': 'windows', 'mobile': False})
 
+def traduzir_para_pt(texto):
+    """
+    Usa a API pública do Google Translate para converter qualquer idioma para Português (PT)
+    """
+    try:
+        texto_seguro = urllib.parse.quote(texto)
+        url = f"https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=pt&dt=t&q={texto_seguro}"
+        resposta = requests.get(url, timeout=5)
+        # O Google devolve um JSON complexo, a tradução fica no primeiro índice
+        texto_traduzido = resposta.json()[0][0][0]
+        return texto_traduzido
+    except Exception as e:
+        print(f"⚠️ Aviso (Tradução falhou, a usar original): {e}", flush=True)
+        return texto
+
 def get_direct_video_url(page_url):
     print(f"🕵️ Extraindo link: {page_url}", flush=True)
     cmd = ['yt-dlp', '-g', '--format', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]', page_url]
     try:
-        # Timeout reduzido para evitar travamentos em links corrompidos
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
         url = result.stdout.strip()
         if url: return url
@@ -35,23 +50,21 @@ def generate_snippet(video_direct_url):
     cmd = [
         'ffmpeg', '-y', '-ss', '00:00:05', '-t', '20', 
         '-i', video_direct_url, 
-        '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '32', # CRF 32 = Processamento super rápido
+        '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '32', 
         '-c:a', 'aac', '-b:a', '64k', output_file
     ]
     try:
-        # DEVNULL oculta o lixo visual do FFmpeg no console para evitar sobrecarga de log
         subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=60)
         return output_file if os.path.exists(output_file) else None
     except Exception as e:
         print(f"❌ Erro FFmpeg: {e}", flush=True)
     return None
 
-def send_to_telegram(path, titulo):
+def send_to_telegram(path, titulo_pt):
     api_url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendVideo"
     
-    # COPY MANTIDA (Agressiva, focada no R$ 9,99 e no benefício)
     caption = (
-        f"🔞 <b>{titulo}</b>\n\n"
+        f"🔞 <b>{titulo_pt}</b>\n\n"
         f"🔥 <b>ACESSO VITALÍCIO LIBERADO!</b>\n\n"
         f"✅ <i>Sem cortes ou censura</i>\n"
         f"✅ <i>+100 vídeos novos por dia</i>\n"
@@ -59,9 +72,9 @@ def send_to_telegram(path, titulo):
         f"👇 <b>CLIQUE NO BOTÃO VERDE ABAIXO POR APENAS R$ 9,99</b> 👇"
     )
     
-    titulo_curto = titulo[:20] + "..." if len(titulo) > 20 else titulo
+    # Encurta o título para não estragar o design do botão no telemóvel
+    titulo_curto = titulo_pt[:20] + "..." if len(titulo_pt) > 20 else titulo_pt
     
-    # BOTÃO TIPO "SUCCESS" (Com emojis verdes, o mais próximo do visual nativo)
     reply_markup = {
         "inline_keyboard": [
             [{"text": f"🟩 ASSISTIR: {titulo_curto} (R$ 9,99) ✅", "url": MEU_CHECKOUT}]
@@ -114,17 +127,22 @@ if __name__ == "__main__":
         if video_direct:
             path = generate_snippet(video_direct)
             if path:
+                # 1. Tenta raspar o título real da página
                 try:
                     res_title = scraper.get(url, timeout=10)
                     soup_title = BeautifulSoup(res_title.text, 'html.parser')
-                    title_real = soup_title.find("meta", property="og:title")["content"].replace(" - XVIDEOS.COM", "").strip()
+                    title_original = soup_title.find("meta", property="og:title")["content"].replace(" - XVIDEOS.COM", "").strip()
                 except:
-                    title_real = "VÍDEO EXCLUSIVO"
+                    title_original = "Conteúdo Exclusivo Premium"
 
-                if send_to_telegram(path, title_real):
+                # 2. TRADUZ O TÍTULO PARA PORTUGUÊS
+                title_pt = traduzir_para_pt(title_original)
+
+                # 3. Envia para o Telegram com o título em PT
+                if send_to_telegram(path, title_pt):
                     contador += 1
-                    print(f"✅ [{contador}/{len(links)}] Postado com sucesso: {title_real}", flush=True)
-                    time.sleep(3) # Pausa curta para não levar bloqueio de spam do Telegram
+                    print(f"✅ [{contador}/{len(links)}] Postado (Traduzido): {title_pt}", flush=True)
+                    time.sleep(3) # Pausa curta
                 
                 if os.path.exists(path): os.remove(path)
                 
