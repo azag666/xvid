@@ -11,7 +11,7 @@ from bs4 import BeautifulSoup
 TELEGRAM_TOKEN = os.environ.get('TELEGRAM_TOKEN')
 CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID')
 TARGET_URL = os.environ.get('TARGET_URL')
-# Link de destino configurado no seu painel ou Secret
+# Link de checkout vindo do painel (ex: PushinPay, Kiwify, etc.)
 BUTTON_LINK = os.environ.get('BUTTON_LINK')
 
 scraper = cloudscraper.create_scraper(browser={'browser': 'chrome', 'platform': 'windows', 'mobile': False})
@@ -45,16 +45,27 @@ def generate_snippet(video_direct_url):
 
 def send_to_telegram(path, titulo):
     api_url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendVideo"
-    caption = f"🔞 <b>{titulo}</b>\n\n👇 <b>ASSISTA AO VÍDEO COMPLETO ABAIXO</b> 👇"
     
-    # Define o link de checkout. Se não houver, usa um fallback.
+    # NOVA COPY FOCADA NA OFERTA IRRECUSÁVEL DE R$ 9,99
+    caption = (
+        f"🔞 <b>{titulo}</b>\n\n"
+        f"🔥 <b>ACESSO VITALÍCIO LIBERADO!</b>\n\n"
+        f"✅ <i>Sem cortes ou censura</i>\n"
+        f"✅ <i>+100 vídeos novos por dia</i>\n"
+        f"✅ <i>Acesso a TODOS os vídeos do canal</i>\n\n"
+        f"👇 <b>CLIQUE NO BOTÃO VERDE ABAIXO POR APENAS R$ 9,99</b> 👇"
+    )
+    
+    # Trata o link de checkout
     link_final = BUTTON_LINK if BUTTON_LINK and BUTTON_LINK != "none" else "https://t.me/seu_contato"
     
-    # ESTRUTURA DE BOTÃO URL (Redireciona para o checkout externo)
+    # Encurta o título do vídeo para garantir que cabe no botão do Telegram
+    titulo_curto = titulo[:18] + "..." if len(titulo) > 18 else titulo
+    
+    # BOTÃO ÚNICO CHAMATIVO COM EMOJIS VERDES E REDIRECIONAMENTO URL
     reply_markup = {
         "inline_keyboard": [
-            [{"text": "🔥 DESBLOQUEAR CONTEÚDO COMPLETO", "url": link_final}],
-            [{"text": "💎 ACESSO VIP VITALÍCIO", "url": link_final}]
+            [{"text": f"🟩 ASSISTIR: {titulo_curto} (R$ 9,99) ✅", "url": link_final}]
         ]
     }
     
@@ -100,6 +111,6 @@ if __name__ == "__main__":
         if video_direct:
             path = generate_snippet(video_direct)
             if path:
-                if send_to_telegram(path, "CONTEÚDO EXCLUSIVO LIBERADO"):
+                if send_to_telegram(path, "VÍDEO EXCLUSIVO"):
                     print(f"✅ Enviado com sucesso!")
                 if os.path.exists(path): os.remove(path)
