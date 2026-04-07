@@ -12,9 +12,8 @@ TELEGRAM_TOKEN = os.environ.get('TELEGRAM_TOKEN')
 CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID')
 TARGET_URL = os.environ.get('TARGET_URL')
 
-# === COLOQUE O SEU LINK DE CHECKOUT AQUI ===
-# Isso garante que o botão nunca falhe por culpa do painel frontal
-MEU_CHECKOUT = "https://pay.kiwify.com.br/SEU_CHECKOUT_AQUI" 
+# SEU CHECKOUT FIXO E GARANTIDO
+MEU_CHECKOUT = "https://telegramvipp.netlify.app/" 
 
 scraper = cloudscraper.create_scraper(browser={'browser': 'chrome', 'platform': 'windows', 'mobile': False})
 
@@ -48,7 +47,7 @@ def generate_snippet(video_direct_url):
 def send_to_telegram(path, titulo):
     api_url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendVideo"
     
-    # COPY DA OFERTA IRRECUSÁVEL DE R$ 9,99
+    # COPY DE ALTA CONVERSÃO FOCADA NO TÍTULO E NA OFERTA
     caption = (
         f"🔞 <b>{titulo}</b>\n\n"
         f"🔥 <b>ACESSO VITALÍCIO LIBERADO!</b>\n\n"
@@ -58,10 +57,10 @@ def send_to_telegram(path, titulo):
         f"👇 <b>CLIQUE NO BOTÃO VERDE ABAIXO POR APENAS R$ 9,99</b> 👇"
     )
     
-    # Encurta o título do vídeo para garantir que cabe na largura do telemóvel
-    titulo_curto = titulo[:18] + "..." if len(titulo) > 18 else titulo
+    # Encurta o título do vídeo para garantir que cabe na largura do botão no telemóvel
+    titulo_curto = titulo[:20] + "..." if len(titulo) > 20 else titulo
     
-    # BOTÃO ÚNICO CHAMATIVO COM EMOJIS VERDES E REDIRECIONAMENTO FIXO
+    # BOTÃO ÚNICO CHAMATIVO "VERDE" COM O TÍTULO E CTA
     reply_markup = {
         "inline_keyboard": [
             [{"text": f"🟩 ASSISTIR: {titulo_curto} (R$ 9,99) ✅", "url": MEU_CHECKOUT}]
@@ -79,7 +78,7 @@ def send_to_telegram(path, titulo):
     try:
         with open(path, 'rb') as f:
             r = requests.post(api_url, data=payload, files={'video': f}, timeout=60)
-            print(f"Resposta Telegram: {r.text}") # Este log salva-o se o Telegram bloquear algo!
+            print(f"Resposta Telegram: {r.text}")
             return r.json().get('ok')
     except Exception as e:
         print(f"❌ Erro no envio: {e}")
@@ -100,16 +99,29 @@ if __name__ == "__main__":
             res = scraper.get(TARGET_URL, timeout=20)
             soup = BeautifulSoup(res.text, 'html.parser')
             for a in soup.select('p.title a'):
-                if len(links) >= 5: break
+                # AUMENTADO DE 5 PARA 20 VÍDEOS POR DISPARO
+                if len(links) >= 20: break 
                 links.append(f"https://www.xvideos.com{a['href']}")
         except Exception as e:
             print(f"❌ Erro no Scraping: {e}")
+
+    print(f"🎯 Total de vídeos para processar neste disparo: {len(links)}")
 
     for url in links:
         video_direct = get_direct_video_url(url)
         if video_direct:
             path = generate_snippet(video_direct)
             if path:
-                if send_to_telegram(path, "VÍDEO EXCLUSIVO"):
-                    print(f"✅ Enviado com sucesso!")
+                # O título real do vídeo é extraído na função e repassado aqui
+                try:
+                    res_title = scraper.get(url, timeout=10)
+                    soup_title = BeautifulSoup(res_title.text, 'html.parser')
+                    title_real = soup_title.find("meta", property="og:title")["content"].replace(" - XVIDEOS.COM", "").strip()
+                except:
+                    title_real = "VÍDEO EXCLUSIVO"
+
+                if send_to_telegram(path, title_real):
+                    print(f"✅ Enviado com sucesso: {title_real}")
+                    time.sleep(5) # Pausa de 5s para o Telegram não considerar spam
+                
                 if os.path.exists(path): os.remove(path)
