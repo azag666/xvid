@@ -11,12 +11,13 @@ from bs4 import BeautifulSoup
 TELEGRAM_TOKEN = os.environ.get('TELEGRAM_TOKEN')
 CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID')
 TARGET_URL = os.environ.get('TARGET_URL')
+# Link de destino configurado no seu painel ou Secret
+BUTTON_LINK = os.environ.get('BUTTON_LINK')
 
 scraper = cloudscraper.create_scraper(browser={'browser': 'chrome', 'platform': 'windows', 'mobile': False})
 
 def get_direct_video_url(page_url):
     print(f"🕵️ Extraindo link real: {page_url}")
-    # Comando para obter a URL direta do vídeo via yt-dlp
     cmd = ['yt-dlp', '-g', '--format', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]', page_url]
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
@@ -29,7 +30,6 @@ def get_direct_video_url(page_url):
 def generate_snippet(video_direct_url):
     output_file = f"video_{int(time.time())}.mp4"
     print("✂️ Criando teaser de 20 segundos...")
-    # Comando FFmpeg para recortar os primeiros 20 segundos
     cmd = [
         'ffmpeg', '-y', '-ss', '00:00:05', '-t', '20', 
         '-i', video_direct_url, 
@@ -45,13 +45,16 @@ def generate_snippet(video_direct_url):
 
 def send_to_telegram(path, titulo):
     api_url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendVideo"
-    caption = f"🔞 <b>{titulo}</b>\n\n👇 <b>TOQUE NO BOTÃO ABAIXO PARA LIBERAR</b> 👇"
+    caption = f"🔞 <b>{titulo}</b>\n\n👇 <b>ASSISTA AO VÍDEO COMPLETO ABAIXO</b> 👇"
     
-    # ESTRUTURA DE CALLBACK (Conecta com o seu vendedor.py para gerar PIX no chat)
+    # Define o link de checkout. Se não houver, usa um fallback.
+    link_final = BUTTON_LINK if BUTTON_LINK and BUTTON_LINK != "none" else "https://t.me/seu_contato"
+    
+    # ESTRUTURA DE BOTÃO URL (Redireciona para o checkout externo)
     reply_markup = {
         "inline_keyboard": [
-            [{"text": "🔥 DESBLOQUEAR VÍDEO (R$ 16,99)", "callback_data": "pix_1699"}],
-            [{"text": "💎 ACESSO VIP (R$ 29,99)", "callback_data": "pix_2999"}]
+            [{"text": "🔥 DESBLOQUEAR CONTEÚDO COMPLETO", "url": link_final}],
+            [{"text": "💎 ACESSO VIP VITALÍCIO", "url": link_final}]
         ]
     }
     
@@ -74,13 +77,12 @@ def send_to_telegram(path, titulo):
 
 if __name__ == "__main__":
     if not TELEGRAM_TOKEN or not CHAT_ID or not TARGET_URL:
-        print("❌ ERRO: Faltam Secrets no GitHub (TOKEN, CHAT_ID ou TARGET_URL)")
+        print("❌ ERRO: Faltam configurações (TOKEN, CHAT_ID ou TARGET_URL)")
         sys.exit(1)
 
     print(f"🚀 Sniper Engine Iniciada - Alvo: {TARGET_URL}")
     
     links = []
-    # Verifica se o link fornecido é um vídeo direto ou uma página de listagem
     if "/video." in TARGET_URL:
         links = [TARGET_URL]
     else:
@@ -91,17 +93,13 @@ if __name__ == "__main__":
                 if len(links) >= 5: break
                 links.append(f"https://www.xvideos.com{a['href']}")
         except Exception as e:
-            print(f"❌ Erro no Scraping da página: {e}")
-
-    print(f"🎯 Total de vídeos para processar: {len(links)}")
+            print(f"❌ Erro no Scraping: {e}")
 
     for url in links:
         video_direct = get_direct_video_url(url)
         if video_direct:
             path = generate_snippet(video_direct)
             if path:
-                success = send_to_telegram(path, "CONTEÚDO EXCLUSIVO LIBERADO")
-                if success:
-                    print(f"✅ Vídeo enviado com sucesso: {url}")
-                    time.sleep(5) # Intervalo para evitar spam
+                if send_to_telegram(path, "CONTEÚDO EXCLUSIVO LIBERADO"):
+                    print(f"✅ Enviado com sucesso!")
                 if os.path.exists(path): os.remove(path)
