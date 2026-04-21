@@ -14,7 +14,7 @@ CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID')
 TARGET_URL = os.environ.get('TARGET_URL')
 
 # SEU CHECKOUT DE ALTA CONVERSÃO
-MEU_CHECKOUT = "https://telegramvipp.netlify.app/" 
+MEU_CHECKOUT = "https://t.me/acessovipvittoriabot" 
 
 scraper = cloudscraper.create_scraper(browser={'browser': 'chrome', 'platform': 'windows', 'mobile': False})
 
