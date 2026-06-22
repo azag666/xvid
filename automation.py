@@ -8,7 +8,7 @@ import cloudscraper
 from bs4 import BeautifulSoup
 import urllib.parse
 
-# Recebendo os parâmetros dinâmicos do GitHub Actions (originados no Front-end)
+# Recebendo os parâmetros dinâmicos do GitHub Actions
 TELEGRAM_TOKEN = os.environ.get('TELEGRAM_TOKEN')
 CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID')
 TARGET_URL = os.environ.get('TARGET_URL')
@@ -42,11 +42,11 @@ def get_direct_video_url(page_url):
         print(f"❌ Erro yt-dlp: {e}", flush=True)
     return None
 
-def generate_snippet(video_direct_url):
-    output_file = f"video_{int(time.time())}.mp4"
-    print("✂️ Criando teaser rápido...", flush=True)
+def generate_snippet(video_direct_url, index):
+    output_file = f"video_{index}_{int(time.time())}.mp4"
+    print(f"✂️ Criando teaser rápido {index}...", flush=True)
     cmd = [
-        'ffmpeg', '-y', '-ss', '00:00:05', '-t', '20', 
+        'ffmpeg', '-y', '-ss', '00:00:05', '-t', '15', # Reduzido para 15s para processar 5 vídeos mais rápido
         '-i', video_direct_url, 
         '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '32', 
         '-c:a', 'aac', '-b:a', '64k', output_file
@@ -58,17 +58,53 @@ def generate_snippet(video_direct_url):
         print(f"❌ Erro FFmpeg: {e}", flush=True)
     return None
 
-def send_to_telegram(path, titulo_pt):
-    api_url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendVideo"
+def send_gallery_and_buttons(paths, titulo_pt):
+    # 1. ENVIAR GALERIA (MEDIA GROUP) COM SPOILER
+    media_url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMediaGroup"
     
-    # Montando a Legenda com o texto que veio do Painel Front-end
-    caption = (
-        f"🔞 <b>{titulo_pt}</b>\n\n"
+    media_group = []
+    files = {}
+    
+    for i, path in enumerate(paths):
+        # Apenas a primeira mídia carrega o título
+        legenda = f"🔞 <b>{titulo_pt}</b>" if i == 0 else ""
+        
+        media_group.append({
+            'type': 'video',
+            'media': f'attach://video{i}',
+            'has_spoiler': True, # ISTO ATIVA O EFEITO DESFOCADO
+            'caption': legenda,
+            'parse_mode': 'HTML'
+        })
+        files[f'video{i}'] = open(path, 'rb')
+        
+    payload_media = {
+        'chat_id': CHAT_ID,
+        'media': json.dumps(media_group)
+    }
+    
+    try:
+        res_media = requests.post(media_url, data=payload_media, files=files, timeout=120)
+        if not res_media.json().get('ok'):
+            print(f"❌ Erro ao enviar galeria: {res_media.text}", flush=True)
+            return False
+    except Exception as e:
+        print(f"❌ Erro de requisição na galeria: {e}", flush=True)
+        return False
+    finally:
+        # Fechar arquivos para permitir exclusão
+        for f in files.values():
+            f.close()
+
+    # 2. ENVIAR A MENSAGEM COM CTA E BOTÕES SEPARADAMENTE
+    msg_url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+    
+    caption_botoes = (
+        f"🔥 <b>ACESSO EXCLUSIVO:</b>\n"
         f"{CUSTOM_CAPTION}\n\n"
-        f"👇 <b>ESCOLHA A SUA OPÇÃO:</b> 👇"
+        f"👇 <b>ESCOLHA A SUA OPÇÃO ABAIXO:</b> 👇"
     )
     
-    # 3 Botões com os links que vieram do Painel Front-end
     reply_markup = {
         "inline_keyboard": [
             [{"text": "📱 WhatsApp Pessoa (R$ 15,00)", "url": LINK_WHATSAPP}],
@@ -77,22 +113,18 @@ def send_to_telegram(path, titulo_pt):
         ]
     }
     
-    payload = {
+    payload_msg = {
         'chat_id': CHAT_ID,
-        'caption': caption,
+        'text': caption_botoes,
         'parse_mode': 'HTML',
-        'supports_streaming': 'true',
         'reply_markup': json.dumps(reply_markup)
     }
     
     try:
-        with open(path, 'rb') as f:
-            r = requests.post(api_url, data=payload, files={'video': f}, timeout=60)
-            if not r.json().get('ok'):
-                print(f"❌ Erro do Telegram: {r.text}", flush=True)
-            return r.json().get('ok')
+        res_msg = requests.post(msg_url, data=payload_msg, timeout=30)
+        return res_msg.json().get('ok')
     except Exception as e:
-        print(f"❌ Erro no envio: {e}", flush=True)
+        print(f"❌ Erro ao enviar botões: {e}", flush=True)
         return False
 
 if __name__ == "__main__":
@@ -100,41 +132,59 @@ if __name__ == "__main__":
         print("❌ ERRO: Faltam configurações essenciais.", flush=True)
         sys.exit(1)
 
-    print(f"🚀 Sniper Engine - Alvo: {TARGET_URL} | Grupo: {CHAT_ID}", flush=True)
+    print(f"🚀 Sniper Engine Multi-Vídeo - Alvo: {TARGET_URL} | Grupo: {CHAT_ID}", flush=True)
     
     links = []
+    # Se for um link direto de vídeo, tenta processar só ele (não formará uma galeria grande)
     if "/video." in TARGET_URL:
         links = [TARGET_URL]
     else:
+        # Se for categoria, raspa os vídeos
         try:
             res = scraper.get(TARGET_URL, timeout=20)
             soup = BeautifulSoup(res.text, 'html.parser')
             for a in soup.select('p.title a'):
-                if len(links) >= 20: break
                 links.append(f"https://www.xvideos.com{a['href']}")
         except Exception as e:
             print(f"❌ Erro no Scraping: {e}", flush=True)
 
-    contador = 0
-    for url in links:
+    paths_to_send = []
+    titulo_principal = "Conteúdo Premium Exclusivo"
+
+    print(f"🎯 Extraindo até 5 vídeos de uma fila de {len(links)}...", flush=True)
+
+    for i, url in enumerate(links):
+        if len(paths_to_send) >= 5: # Limite de 5 vídeos para a galeria
+            break
+            
         video_direct = get_direct_video_url(url)
         if video_direct:
-            path = generate_snippet(video_direct)
+            path = generate_snippet(video_direct, i)
             if path:
-                try:
-                    res_title = scraper.get(url, timeout=10)
-                    soup_title = BeautifulSoup(res_title.text, 'html.parser')
-                    title_original = soup_title.find("meta", property="og:title")["content"].replace(" - XVIDEOS.COM", "").strip()
-                except:
-                    title_original = "Conteúdo Exclusivo Premium"
-
-                title_pt = traduzir_para_pt(title_original)
-
-                if send_to_telegram(path, title_pt):
-                    contador += 1
-                    print(f"✅ [{contador}/{len(links)}] Postado: {title_pt}", flush=True)
-                    time.sleep(3)
+                paths_to_send.append(path)
                 
-                if os.path.exists(path): os.remove(path)
-                
-    print(f"🏁 Finalizado! {contador} vídeos enviados.", flush=True)
+                # Extrai o título do primeiro vídeo capturado para ser o título da postagem
+                if len(paths_to_send) == 1:
+                    try:
+                        res_title = scraper.get(url, timeout=10)
+                        soup_title = BeautifulSoup(res_title.text, 'html.parser')
+                        title_original = soup_title.find("meta", property="og:title")["content"].replace(" - XVIDEOS.COM", "").strip()
+                        titulo_principal = traduzir_para_pt(title_original)
+                    except:
+                        pass
+
+    # Dispara a galeria se conseguiu capturar as mídias
+    if paths_to_send:
+        print(f"📦 Enviando Galeria com {len(paths_to_send)} vídeos (Spoiler ATIVADO)...", flush=True)
+        
+        sucesso = send_gallery_and_buttons(paths_to_send, titulo_principal)
+        
+        if sucesso:
+            print("✅ Galeria e botões postados com sucesso no grupo!", flush=True)
+        
+        # Limpeza de disco
+        for p in paths_to_send:
+            if os.path.exists(p): 
+                os.remove(p)
+    else:
+        print("❌ Nenhum vídeo pôde ser extraído e processado.", flush=True)
