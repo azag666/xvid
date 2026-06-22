@@ -8,17 +8,20 @@ on:
       video_url:
         required: true
         type: string
+      chat_id:
+        required: false
+        type: string
       caption_text:
         required: false
         type: string
       link_whatsapp:
-        required: true
+        required: false
         type: string
       link_amigas:
-        required: true
+        required: false
         type: string
       link_chamada:
-        required: true
+        required: false
         type: string
 
 jobs:
@@ -42,7 +45,8 @@ jobs:
       - name: Executar Sniper Engine
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          # Pega o Chat ID enviado do front; se vazio, usa o secret
+          TELEGRAM_CHAT_ID: ${{ github.event.client_payload.chat_id || secrets.TELEGRAM_CHAT_ID }}
           TARGET_URL: ${{ github.event.client_payload.video_url || inputs.video_url }}
           CUSTOM_CAPTION: ${{ github.event.client_payload.caption_text || inputs.caption_text }}
           LINK_WHATSAPP: ${{ github.event.client_payload.link_whatsapp || inputs.link_whatsapp }}
