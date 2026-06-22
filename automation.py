@@ -8,29 +8,27 @@ import cloudscraper
 from bs4 import BeautifulSoup
 import urllib.parse
 
-# Configurações do GitHub Actions
+# Recebendo os parâmetros dinâmicos do GitHub Actions (originados no Front-end)
 TELEGRAM_TOKEN = os.environ.get('TELEGRAM_TOKEN')
 CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID')
 TARGET_URL = os.environ.get('TARGET_URL')
+CUSTOM_CAPTION = os.environ.get('CUSTOM_CAPTION', '')
 
-# SEU CHECKOUT DE ALTA CONVERSÃO
-MEU_CHECKOUT = "https://t.me/acessovipvittoriabot" 
+# Links dos botões recebidos do front-end
+LINK_WHATSAPP = os.environ.get('LINK_WHATSAPP', 'https://t.me/default')
+LINK_AMIGAS = os.environ.get('LINK_AMIGAS', 'https://t.me/default')
+LINK_CHAMADA = os.environ.get('LINK_CHAMADA', 'https://t.me/default')
 
 scraper = cloudscraper.create_scraper(browser={'browser': 'chrome', 'platform': 'windows', 'mobile': False})
 
 def traduzir_para_pt(texto):
-    """
-    Usa a API pública do Google Translate para converter qualquer idioma para Português (PT)
-    """
     try:
         texto_seguro = urllib.parse.quote(texto)
         url = f"https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=pt&dt=t&q={texto_seguro}"
         resposta = requests.get(url, timeout=5)
-        # O Google devolve um JSON complexo, a tradução fica no primeiro índice
-        texto_traduzido = resposta.json()[0][0][0]
-        return texto_traduzido
+        return resposta.json()[0][0][0]
     except Exception as e:
-        print(f"⚠️ Aviso (Tradução falhou, a usar original): {e}", flush=True)
+        print(f"⚠️ Aviso (Tradução falhou): {e}", flush=True)
         return texto
 
 def get_direct_video_url(page_url):
@@ -63,21 +61,19 @@ def generate_snippet(video_direct_url):
 def send_to_telegram(path, titulo_pt):
     api_url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendVideo"
     
+    # Montando a Legenda com o texto que veio do Painel Front-end
     caption = (
         f"🔞 <b>{titulo_pt}</b>\n\n"
-        f"🔥 <b>ACESSO VITALÍCIO LIBERADO!</b>\n\n"
-        f"✅ <i>Sem cortes ou censura</i>\n"
-        f"✅ <i>+100 vídeos novos por dia</i>\n"
-        f"✅ <i>Acesso a TODOS os vídeos do canal</i>\n\n"
-        f"👇 <b>CLIQUE NO BOTÃO VERDE ABAIXO POR APENAS R$ 9,99</b> 👇"
+        f"{CUSTOM_CAPTION}\n\n"
+        f"👇 <b>ESCOLHA A SUA OPÇÃO:</b> 👇"
     )
     
-    # Encurta o título para não estragar o design do botão no telemóvel
-    titulo_curto = titulo_pt[:20] + "..." if len(titulo_pt) > 20 else titulo_pt
-    
+    # 3 Botões com os links que vieram do Painel Front-end
     reply_markup = {
         "inline_keyboard": [
-            [{"text": f"🟩 ASSISTIR: {titulo_curto} (R$ 9,99) ✅", "url": MEU_CHECKOUT}]
+            [{"text": "📱 WhatsApp Pessoa (R$ 15,00)", "url": LINK_WHATSAPP}],
+            [{"text": "👯‍♀️ Amigas (R$ 15,00)", "url": LINK_AMIGAS}],
+            [{"text": "📹 Chamada de Vídeo (R$ 45,00)", "url": LINK_CHAMADA}]
         ]
     }
     
@@ -101,10 +97,10 @@ def send_to_telegram(path, titulo_pt):
 
 if __name__ == "__main__":
     if not TELEGRAM_TOKEN or not CHAT_ID or not TARGET_URL:
-        print("❌ ERRO: Faltam configurações no GitHub", flush=True)
+        print("❌ ERRO: Faltam configurações essenciais.", flush=True)
         sys.exit(1)
 
-    print(f"🚀 Sniper Engine Iniciada - Alvo: {TARGET_URL}", flush=True)
+    print(f"🚀 Sniper Engine - Alvo: {TARGET_URL} | Grupo: {CHAT_ID}", flush=True)
     
     links = []
     if "/video." in TARGET_URL:
@@ -114,12 +110,10 @@ if __name__ == "__main__":
             res = scraper.get(TARGET_URL, timeout=20)
             soup = BeautifulSoup(res.text, 'html.parser')
             for a in soup.select('p.title a'):
-                if len(links) >= 20: break  # GARANTIA DE 20 VÍDEOS MÁXIMO
+                if len(links) >= 20: break
                 links.append(f"https://www.xvideos.com{a['href']}")
         except Exception as e:
             print(f"❌ Erro no Scraping: {e}", flush=True)
-
-    print(f"🎯 Total na fila para este disparo: {len(links)} vídeos", flush=True)
 
     contador = 0
     for url in links:
@@ -127,7 +121,6 @@ if __name__ == "__main__":
         if video_direct:
             path = generate_snippet(video_direct)
             if path:
-                # 1. Tenta raspar o título real da página
                 try:
                     res_title = scraper.get(url, timeout=10)
                     soup_title = BeautifulSoup(res_title.text, 'html.parser')
@@ -135,15 +128,13 @@ if __name__ == "__main__":
                 except:
                     title_original = "Conteúdo Exclusivo Premium"
 
-                # 2. TRADUZ O TÍTULO PARA PORTUGUÊS
                 title_pt = traduzir_para_pt(title_original)
 
-                # 3. Envia para o Telegram com o título em PT
                 if send_to_telegram(path, title_pt):
                     contador += 1
-                    print(f"✅ [{contador}/{len(links)}] Postado (Traduzido): {title_pt}", flush=True)
-                    time.sleep(3) # Pausa curta
+                    print(f"✅ [{contador}/{len(links)}] Postado: {title_pt}", flush=True)
+                    time.sleep(3)
                 
                 if os.path.exists(path): os.remove(path)
                 
-    print(f"🏁 Finalizado! {contador} vídeos enviados para o grupo.", flush=True)
+    print(f"🏁 Finalizado! {contador} vídeos enviados.", flush=True)
