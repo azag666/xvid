@@ -4,25 +4,6 @@ on:
   repository_dispatch:
     types: [iniciar_disparo]
   workflow_dispatch:
-    inputs:
-      video_url:
-        required: true
-        type: string
-      chat_id:
-        required: false
-        type: string
-      caption_text:
-        required: false
-        type: string
-      link_whatsapp:
-        required: false
-        type: string
-      link_amigas:
-        required: false
-        type: string
-      link_chamada:
-        required: false
-        type: string
 
 jobs:
   publicar-no-grupo:
@@ -36,8 +17,9 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Instalar FFmpeg
-        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Instalar FFmpeg e Fontes
+        # As fontes são instaladas para a marca d'água funcionar corretamente
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg fonts-liberation
 
       - name: Instalar Dependências
         run: pip install requests beautifulsoup4 cloudscraper yt-dlp
@@ -45,11 +27,12 @@ jobs:
       - name: Executar Sniper Engine
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
-          # Pega o Chat ID enviado do front; se vazio, usa o secret
           TELEGRAM_CHAT_ID: ${{ github.event.client_payload.chat_id || secrets.TELEGRAM_CHAT_ID }}
-          TARGET_URL: ${{ github.event.client_payload.video_url || inputs.video_url }}
-          CUSTOM_CAPTION: ${{ github.event.client_payload.caption_text || inputs.caption_text }}
-          LINK_WHATSAPP: ${{ github.event.client_payload.link_whatsapp || inputs.link_whatsapp }}
-          LINK_AMIGAS: ${{ github.event.client_payload.link_amigas || inputs.link_amigas }}
-          LINK_CHAMADA: ${{ github.event.client_payload.link_chamada || inputs.link_chamada }}
+          TARGET_URL: ${{ github.event.client_payload.video_url }}
+          CUSTOM_MEDIA_URL: ${{ github.event.client_payload.custom_media_url }}
+          SCRAPE_LIMIT: ${{ github.event.client_payload.scrape_limit }}
+          VIDEO_DURATION: ${{ github.event.client_payload.video_duration }}
+          WATERMARK_TEXT: ${{ github.event.client_payload.watermark_text }}
+          CUSTOM_CAPTION: ${{ github.event.client_payload.caption_text }}
+          DYNAMIC_BUTTONS: ${{ github.event.client_payload.dynamic_buttons }}
         run: python automation.py
