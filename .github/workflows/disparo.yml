@@ -11,7 +11,13 @@ on:
       caption_text:
         required: false
         type: string
-      button_link:
+      link_whatsapp:
+        required: true
+        type: string
+      link_amigas:
+        required: true
+        type: string
+      link_chamada:
         required: true
         type: string
 
@@ -39,6 +45,7 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           TARGET_URL: ${{ github.event.client_payload.video_url || inputs.video_url }}
           CUSTOM_CAPTION: ${{ github.event.client_payload.caption_text || inputs.caption_text }}
-          # ESTA LINHA ABAIXO É A QUE ESTAVA A FALTAR:
-          BUTTON_LINK: ${{ github.event.client_payload.button_link || inputs.button_link }}
+          LINK_WHATSAPP: ${{ github.event.client_payload.link_whatsapp || inputs.link_whatsapp }}
+          LINK_AMIGAS: ${{ github.event.client_payload.link_amigas || inputs.link_amigas }}
+          LINK_CHAMADA: ${{ github.event.client_payload.link_chamada || inputs.link_chamada }}
         run: python automation.py
