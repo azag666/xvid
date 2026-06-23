@@ -26,6 +26,7 @@ SCRAPE_LIMIT = int(config.get('scrape_limit', 5))
 VIDEO_DURATION = config.get('video_duration', 'teaser')
 WATERMARK_TEXT = config.get('watermark_text', '').strip()
 WATERMARK_POS = config.get('watermark_pos', 'bottom_right')
+WATERMARK_SIZE = config.get('watermark_size', '28') # Nova variável de tamanho
 
 USE_SPOILER = config.get('use_spoiler', True)
 USE_TITLE = config.get('use_title', True)
@@ -67,13 +68,15 @@ def process_video(video_direct_url, index):
     if WATERMARK_TEXT:
         escaped_text = WATERMARK_TEXT.replace("'", "\\'")
         
+        # Lógica de Posição
         if WATERMARK_POS == 'top_left': pos = 'x=15:y=15'
         elif WATERMARK_POS == 'top_right': pos = 'x=w-tw-15:y=15'
         elif WATERMARK_POS == 'bottom_left': pos = 'x=15:y=h-th-15'
         elif WATERMARK_POS == 'center': pos = 'x=(w-tw)/2:y=(h-th)/2'
         else: pos = 'x=w-tw-15:y=h-th-15' 
         
-        vf_filter = f"drawtext=text='{escaped_text}':fontcolor=white:fontsize=28:box=1:boxcolor=black@0.6:{pos}"
+        # Aplicação do Texto, Fundo, Posição e TAMANHO (WATERMARK_SIZE)
+        vf_filter = f"drawtext=text='{escaped_text}':fontcolor=white:fontsize={WATERMARK_SIZE}:box=1:boxcolor=black@0.6:{pos}"
         cmd.extend(['-vf', vf_filter])
         
     cmd.extend(['-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '32', '-c:a', 'aac', '-b:a', '64k', output_file])
@@ -167,7 +170,9 @@ def send_single_mode(paths, titulos):
     return True
 
 if __name__ == "__main__":
-    if not TELEGRAM_TOKEN or not CHAT_ID: sys.exit(1)
+    if not TELEGRAM_TOKEN or not CHAT_ID: 
+        print("❌ ERRO: Faltam credenciais do Telegram.", flush=True)
+        sys.exit(1)
 
     paths_to_send = []
     titulos = []
