@@ -18,7 +18,6 @@ jobs:
           python-version: '3.10'
 
       - name: Instalar FFmpeg e Fontes
-        # As fontes são instaladas para a marca d'água funcionar corretamente
         run: sudo apt-get update && sudo apt-get install -y ffmpeg fonts-liberation
 
       - name: Instalar Dependências
@@ -33,6 +32,10 @@ jobs:
           SCRAPE_LIMIT: ${{ github.event.client_payload.scrape_limit }}
           VIDEO_DURATION: ${{ github.event.client_payload.video_duration }}
           WATERMARK_TEXT: ${{ github.event.client_payload.watermark_text }}
+          WATERMARK_POS: ${{ github.event.client_payload.watermark_pos }}
+          USE_SPOILER: ${{ github.event.client_payload.use_spoiler }}
+          USE_TITLE: ${{ github.event.client_payload.use_title }}
+          SEND_MODE: ${{ github.event.client_payload.send_mode }}
           CUSTOM_CAPTION: ${{ github.event.client_payload.caption_text }}
           DYNAMIC_BUTTONS: ${{ github.event.client_payload.dynamic_buttons }}
         run: python automation.py
