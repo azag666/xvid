@@ -4,6 +4,9 @@ on:
   repository_dispatch:
     types: [iniciar_disparo]
   workflow_dispatch:
+  schedule:
+    # Roda a cada 3 horas automaticamente (0 0,3,6,9,12,15,18,21)
+    - cron: '0 */3 * * *'
 
 jobs:
   publicar-no-grupo:
@@ -27,6 +30,5 @@ jobs:
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          # Captura o pacote inteiro com as configurações
           CONFIG_DATA: ${{ github.event.client_payload.config_data }}
         run: python automation.py
