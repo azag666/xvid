@@ -8,24 +8,32 @@ import cloudscraper
 from bs4 import BeautifulSoup
 import urllib.parse
 
-# 1. CAPTURA DE VARIÁVEIS DO FRONT-END
+# 1. CAPTURA DE VARIÁVEIS DO PACOTE ENVIADO PELO GITHUB ACTIONS
 TELEGRAM_TOKEN = os.environ.get('TELEGRAM_TOKEN')
-CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID')
-TARGET_URL = os.environ.get('TARGET_URL', '').strip()
-CUSTOM_MEDIA_URL = os.environ.get('CUSTOM_MEDIA_URL', '').strip()
+DEFAULT_CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID')
 
-SCRAPE_LIMIT = int(os.environ.get('SCRAPE_LIMIT', '5') or '5')
-VIDEO_DURATION = os.environ.get('VIDEO_DURATION', 'teaser')
-WATERMARK_TEXT = os.environ.get('WATERMARK_TEXT', '').strip()
-WATERMARK_POS = os.environ.get('WATERMARK_POS', 'bottom_right')
+# Desempacotar as configurações que vieram do Front-end
+config_data_str = os.environ.get('CONFIG_DATA', '{}')
+try:
+    config = json.loads(config_data_str)
+except:
+    config = {}
 
-# Toggles de Interface
-USE_SPOILER = os.environ.get('USE_SPOILER', 'true').lower() == 'true'
-USE_TITLE = os.environ.get('USE_TITLE', 'true').lower() == 'true'
-SEND_MODE = os.environ.get('SEND_MODE', 'single') # 'single' ou 'gallery'
+CHAT_ID = config.get('chat_id', '').strip() or DEFAULT_CHAT_ID
+TARGET_URL = config.get('video_url', '').strip()
+CUSTOM_MEDIA_URL = config.get('custom_media_url', '').strip()
 
-CUSTOM_CAPTION = os.environ.get('CUSTOM_CAPTION', '')
-RAW_BUTTONS = os.environ.get('DYNAMIC_BUTTONS', '[]')
+SCRAPE_LIMIT = int(config.get('scrape_limit', 5))
+VIDEO_DURATION = config.get('video_duration', 'teaser')
+WATERMARK_TEXT = config.get('watermark_text', '').strip()
+WATERMARK_POS = config.get('watermark_pos', 'bottom_right')
+
+USE_SPOILER = config.get('use_spoiler', True)
+USE_TITLE = config.get('use_title', True)
+SEND_MODE = config.get('send_mode', 'single')
+
+CUSTOM_CAPTION = config.get('caption_text', '')
+BOTOES_LISTA = config.get('dynamic_buttons', [])
 
 scraper = cloudscraper.create_scraper(browser={'browser': 'chrome', 'platform': 'windows', 'mobile': False})
 
@@ -82,8 +90,8 @@ def process_video(video_direct_url, index):
 def build_reply_markup():
     inline_keyboard = []
     try:
-        botoes_lista = json.loads(RAW_BUTTONS)
-        for b in botoes_lista: inline_keyboard.append([{"text": b['name'], "url": b['url']}])
+        for b in BOTOES_LISTA:
+            inline_keyboard.append([{"text": b['name'], "url": b['url']}])
     except: pass
     return json.dumps({"inline_keyboard": inline_keyboard}) if inline_keyboard else None
 
@@ -148,7 +156,6 @@ if __name__ == "__main__":
     paths_to_send = []
     titulos = []
 
-    # Extração
     if CUSTOM_MEDIA_URL:
         video_direct = get_direct_video_url(CUSTOM_MEDIA_URL)
         if video_direct:
@@ -180,7 +187,6 @@ if __name__ == "__main__":
                     except:
                         titulos.append("Conteúdo Premium")
 
-    # Disparo
     if paths_to_send:
         print(f"📦 Enviando para o Telegram (Modo: {SEND_MODE})...", flush=True)
         if SEND_MODE == 'gallery':
