@@ -26,16 +26,7 @@ jobs:
       - name: Executar Sniper Engine
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ github.event.client_payload.chat_id || secrets.TELEGRAM_CHAT_ID }}
-          TARGET_URL: ${{ github.event.client_payload.video_url }}
-          CUSTOM_MEDIA_URL: ${{ github.event.client_payload.custom_media_url }}
-          SCRAPE_LIMIT: ${{ github.event.client_payload.scrape_limit }}
-          VIDEO_DURATION: ${{ github.event.client_payload.video_duration }}
-          WATERMARK_TEXT: ${{ github.event.client_payload.watermark_text }}
-          WATERMARK_POS: ${{ github.event.client_payload.watermark_pos }}
-          USE_SPOILER: ${{ github.event.client_payload.use_spoiler }}
-          USE_TITLE: ${{ github.event.client_payload.use_title }}
-          SEND_MODE: ${{ github.event.client_payload.send_mode }}
-          CUSTOM_CAPTION: ${{ github.event.client_payload.caption_text }}
-          DYNAMIC_BUTTONS: ${{ github.event.client_payload.dynamic_buttons }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          # Captura o pacote inteiro com as configurações
+          CONFIG_DATA: ${{ github.event.client_payload.config_data }}
         run: python automation.py
