@@ -25,15 +25,25 @@ except:
 LINK_ALVO_AUTOMATICO = "https://www.xvideos.com/tags/amadoras"
 
 COPYS_AUTOMATICAS = [
-    "🚨 ACESSO VIP LIBERADO! 🚨\nConteúdo sem censura atualizado hoje.",
-    "🔥 Só os melhores vídeos completos no nosso grupo fechado! Vem ver:",
-    "😈 Não perca mais tempo a procurar. O melhor conteúdo está aqui em baixo:",
-    "👀 Vídeo completo vazado! Assiste antes que seja apagado:"
+    "📱 Cansei de intermediários. Quero você no meu WhatsApp pessoal hoje! Me chama lá para chamadas de vídeo e +30 vídeos exclusivos que só libero no privado. R$ 15,00 entrada única! 😈👇",
+    "🔥 Você quer me ver de verdade? Liberei meu número particular! Vem trocar mensagens comigo, fazer chamada de vídeo e ainda ganha mais de 30 vídeos meus sem censura. Clica aqui: 🔞",
+    "🚨 ATENÇÃO: Meu WhatsApp pessoal tá liberado por alguns minutos. Quem entrar agora vai fazer chamada de vídeo comigo e receber +30 vídeos que nunca postei em lugar nenhum! 💦👇",
+    "👀 Quer me ver ao vivo? Pega meu WhatsApp pessoal hoje. Além de chamada de vídeo, separei um pack com mais de 30 vídeos ultra exclusivos direto no seu zap por R$ 15,00! 💵",
+    "🤫 Chega de robô, eu quero falar com você direto no meu celular. Garanta meu número privado, faz chamada de vídeo comigo e racha de ver meus +30 vídeos proibidos agora! 👇",
+    "😈 Se você aguenta conteúdo pesado, me chama no WhatsApp pessoal. São mais de 30 vídeos exclusivos e direito a chamada de vídeo comigo no sigilo. Só R$ 15,00 hoje! 📞",
+    "💥 Acabei de liberar meu número real! Quero te mandar mais de 30 vídeos exclusivos direto no seu zap e te atender em chamada de vídeo. Não perde tempo e clica abaixo! 🏃‍♀️💨",
+    "❌ Não compre se não aguentar safadeza amadora. Meu WhatsApp pessoal tá aberto: +30 vídeos secretos inclusos e tô online para chamada de vídeo. Vem antes que eu mude de número! 🔒",
+    "❤️ Quero intimidade com você. Por R$ 15,00 você pega meu WhatsApp particular, ganha acesso a chamadas de vídeo comigo e destrava mais de 30 vídeos meus mais quentes! 👅👇",
+    "📱 Meu WhatsApp pessoal tá na sua mão. Quer me ver por chamada de vídeo e receber +30 vídeos que o bot não mostra? Taxa única de R$ 15,00. Clica e me chama agora! 👇",
+    "🔥 O que eu posto aqui não é nada perto do que te envio no privado. Garanta meu WhatsApp pessoal, faz chamada de vídeo comigo e assista a mais de 30 vídeos exclusivos meus! 🔞",
+    "🚨 LINK EXCLUSIVO: Saia do bot e venha falar direto comigo no meu celular. Te entrego +30 vídeos inéditos e te atendo em chamada de vídeo por apenas R$ 15,00! ⚡👇",
+    "🤤 Quer me ver do jeito que vim ao mundo? Pega meu WhatsApp pessoal agora! Tem chamada de vídeo ao vivo e mais de 30 mídias exclusivas te esperando na conversa. Clica já! 💳",
+    "🤫 Meu contato privado sumirá em 2 minutos. Garanta meu WhatsApp pessoal por R$ 15,00: faça chamada de vídeo e receba mais de 30 vídeos que ninguém mais tem acesso! 🔥",
+    "🔞 Quer falar comigo sem censura? Liberei meu WhatsApp pessoal só para os primeiros. Vem fazer chamada de vídeo e receber +30 vídeos meus totalmente privados. Clica abaixo! 👇"
 ]
 
 BOTOES_AUTOMATICOS = [
-    {"name": "📱 WhatsApp Pessoa (R$ 15)", "url": "https://seu-link-checkout.com/wpp"},
-    {"name": "👯‍♀️ Amigas (R$ 15)", "url": "https://seu-link-checkout.com/amigas"}
+    {"name": "📱 WhatsApp Pessoal (R$ 15)", "url": "https://whatspessoalvitoria.netlify.app"},
 ]
 # ==========================================
 
@@ -217,7 +227,7 @@ if __name__ == "__main__":
             titulos.append("Conteúdo Exclusivo")
                     
     elif TARGET_URL:
-        # Se for rodar automático 24h, sorteia uma página aleatória do XV (página 1 até 15) para nunca repetir os mesmos vídeos
+        # Se for rodar automático 24h, sorteia uma página aleatória do XV para não repetir vídeos
         final_url = TARGET_URL
         if not config and "/tags/" in TARGET_URL:
             pagina_random = random.randint(1, 15)
@@ -232,7 +242,6 @@ if __name__ == "__main__":
                 for a in soup.select('p.title a'): links.append(f"https://www.xvideos.com{a['href']}")
             except: pass
 
-        # Sorteia os vídeos capturados para não mandar sempre os primeiros
         if len(links) > SCRAPE_LIMIT:
             links = random.sample(links, SCRAPE_LIMIT)
 
