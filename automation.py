@@ -12,7 +12,6 @@ import urllib.parse
 TELEGRAM_TOKEN = os.environ.get('TELEGRAM_TOKEN')
 DEFAULT_CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID')
 
-# Desempacotar as configurações que vieram do Front-end
 config_data_str = os.environ.get('CONFIG_DATA', '{}')
 try:
     config = json.loads(config_data_str)
@@ -68,12 +67,11 @@ def process_video(video_direct_url, index):
     if WATERMARK_TEXT:
         escaped_text = WATERMARK_TEXT.replace("'", "\\'")
         
-        # Posições da marca d'água
         if WATERMARK_POS == 'top_left': pos = 'x=15:y=15'
         elif WATERMARK_POS == 'top_right': pos = 'x=w-tw-15:y=15'
         elif WATERMARK_POS == 'bottom_left': pos = 'x=15:y=h-th-15'
         elif WATERMARK_POS == 'center': pos = 'x=(w-tw)/2:y=(h-th)/2'
-        else: pos = 'x=w-tw-15:y=h-th-15' # default bottom_right
+        else: pos = 'x=w-tw-15:y=h-th-15' 
         
         vf_filter = f"drawtext=text='{escaped_text}':fontcolor=white:fontsize=28:box=1:boxcolor=black@0.6:{pos}"
         cmd.extend(['-vf', vf_filter])
@@ -95,21 +93,34 @@ def build_reply_markup():
     except: pass
     return json.dumps({"inline_keyboard": inline_keyboard}) if inline_keyboard else None
 
-def build_caption(titulo_pt):
+def build_caption(titulo_pt, only_title=False, only_copy_and_call=False):
     cap = ""
+    
+    # Modo Galeria: Apenas Título no Vídeo
+    if only_title:
+        if USE_TITLE and titulo_pt: cap += f"🔞 <b>{titulo_pt}</b>"
+        return cap
+        
+    # Modo Galeria: Apenas Copy e Botões na Mensagem de Texto
+    if only_copy_and_call:
+        if CUSTOM_CAPTION: cap += f"{CUSTOM_CAPTION}\n\n"
+        cap += f"👇 <b>ESCOLHA SUA OPÇÃO:</b> 👇"
+        return cap
+        
+    # Modo Single: Título, Copy e Botões juntos no mesmo balão
     if USE_TITLE and titulo_pt: cap += f"🔞 <b>{titulo_pt}</b>\n\n"
     if CUSTOM_CAPTION: cap += f"{CUSTOM_CAPTION}\n\n"
     cap += f"👇 <b>ESCOLHA SUA OPÇÃO:</b> 👇"
     return cap
 
 def send_gallery_mode(paths, titulo_pt):
-    # Envia Galeria (Sem botões, limitação da API do Telegram)
     media_url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMediaGroup"
     media_group = []
     files = {}
     
     for i, path in enumerate(paths):
-        legenda = build_caption(titulo_pt) if i == 0 else ""
+        # Aqui injeta apenas o Título no vídeo 0
+        legenda = build_caption(titulo_pt, only_title=True) if i == 0 else ""
         media_group.append({
             'type': 'video', 'media': f'attach://video{i}', 
             'has_spoiler': USE_SPOILER, 'caption': legenda, 'parse_mode': 'HTML'
@@ -121,19 +132,24 @@ def send_gallery_mode(paths, titulo_pt):
     finally:
         for f in files.values(): f.close()
 
-    # Envia os Botões Separadamente na sequência
     msg_url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-    payload_msg = { 'chat_id': CHAT_ID, 'text': build_caption(titulo_pt), 'parse_mode': 'HTML', 'reply_markup': build_reply_markup() }
+    # Aqui envia apenas a Copy principal com a call to action
+    payload_msg = { 
+        'chat_id': CHAT_ID, 
+        'text': build_caption(titulo_pt, only_copy_and_call=True), 
+        'parse_mode': 'HTML', 
+        'reply_markup': build_reply_markup() 
+    }
     requests.post(msg_url, data=payload_msg, timeout=30)
     return True
 
 def send_single_mode(paths, titulos):
-    # Envia Mídia, Copy e Botões TODOS JUNTOS em um único balão
     api_url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendVideo"
     reply_markup = build_reply_markup()
     
     for i, path in enumerate(paths):
         titulo_atual = titulos[i] if len(titulos) > i else "Conteúdo Premium"
+        # Constrói o balão completo
         caption = build_caption(titulo_atual)
         
         payload = {
