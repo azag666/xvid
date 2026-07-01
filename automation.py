@@ -157,17 +157,23 @@ if __name__ == "__main__":
     headers_download = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0)", "Referer": "https://www.erome.com/"}
 
     # --- 3. LOOP DE DOWNLOAD, CORTE E ENVIO ---
+# --- 3. LOOP DE DOWNLOAD, CORTE E ENVIO ---
     for idx, (video_mp4, titulo_video) in enumerate(videos_para_baixar):
         print(f"\n--- [Processando Vídeo {idx+1}/{len(videos_para_baixar)}] ---")
         
-        # Constrói a legenda consoante as opções que marcou no Painel
+        # AJUSTE: Legenda inteligente baseada estritamente no checkbox do front-end
         partes_legenda = []
-        if puxar_titulo:
+        
+        # Só adiciona o título se o "puxar_titulo" for explicitamente TRUE
+        if puxar_titulo == True or puxar_titulo == "true":
             partes_legenda.append(f"🔥 {titulo_video}")
+            
+        # Só adiciona a copy se houver conteúdo nela
         if copy_front:
             partes_legenda.append(copy_front)
             
-        legenda = "\n\n".join(partes_legenda)
+        # Se nada foi marcado, a legenda fica vazia ou com uma string padrão para evitar erro
+        legenda = "\n\n".join(partes_legenda) if partes_legenda else " "
 
         temp_filename = f"video_temp_{idx}.mp4"
         temp_cropped = f"video_temp_cropped_{idx}.mp4"
@@ -182,11 +188,10 @@ if __name__ == "__main__":
                 for chunk in vid_resposta.iter_content(chunk_size=8192):
                     f.write(chunk)
                     
-            # CORTE FFMPEG (Agora com cálculo matemático rigoroso para números pares)
-            print("[*] A aplicar corte de 150 pixels para remover a marca de água inferior...")
+            # CORTE FFMPEG
+            print("[*] A aplicar corte de 150px para remover marca de água...")
             comando_ffmpeg = [
                 "ffmpeg", "-y", "-i", temp_filename,
-                # trunc() obriga as dimensões do vídeo cortado a serem números pares para evitar erro do codec h264
                 "-filter:v", "crop='trunc(iw/2)*2':'trunc((ih-150)/2)*2':0:0", 
                 "-preset", "ultrafast",
                 "-c:a", "copy",
@@ -194,13 +199,37 @@ if __name__ == "__main__":
             ]
             
             try:
-                # Capture_output nos ajuda a ver o erro caso falhe, em vez de o silenciar totalmente
-                processo = subprocess.run(comando_ffmpeg, check=True, capture_output=True, text=True)
+                subprocess.run(comando_ffmpeg, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 if os.path.exists(temp_cropped):
                     os.remove(temp_filename)
                     os.rename(temp_cropped, temp_filename)
             except subprocess.CalledProcessError as e:
-                print(f"[!] Aviso FFmpeg: Não foi possível cortar a marca de água (Erro interno do codec). Será enviado o vídeo original. Log: {e.stderr}")
+                print(f"[!] Erro no corte. Enviando original.")
+            
+            # UPLOAD TELEGRAM
+            print("[*] A fazer upload...")
+            with open(temp_filename, 'rb') as video_file:
+                payload = {
+                    "chat_id": chat_id, 
+                    "caption": legenda,
+                    "has_spoiler": str(has_spoiler).lower(),
+                    "parse_mode": "HTML"
+                }
+                files = {"video": video_file}
+                req = requests.post(api_url, data=payload, files=files, timeout=300)
+                resp = req.json()
+            
+            if resp.get("ok"):
+                print(f"[✓] Vídeo {idx+1} publicado!")
+            else:
+                print(f"[!] Erro Telegram vídeo {idx+1}: {resp.get('description')}")
+                
+        except Exception as e:
+            print(f"[!] Falha no vídeo {idx+1}: {str(e)}")
+            
+        finally:
+            if os.path.exists(temp_filename): os.remove(temp_filename)
+            if os.path.exists(temp_cropped): os.remove(temp_cropped)
             
             # UPLOAD TELEGRAM
             print("[*] A fazer upload para o canal Telegram...")
