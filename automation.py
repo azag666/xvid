@@ -107,7 +107,7 @@ if __name__ == "__main__":
     # 4. EXECUTA O SCRAPING
     resultado = processar_link(link_input)
     
-    print("\n" + "="*30)
+   print("\n" + "="*30)
     print("      RESULTADO DA EXTRAÇÃO")
     print("="*30)
     
@@ -115,16 +115,64 @@ if __name__ == "__main__":
         print(f"❌ {resultado['erro']}")
         sys.exit(1)
         
-    for chave, valor in resultado.items():
-        if isinstance(valor, list):
-            print(f"{chave.upper()}:")
-            if not valor:
-                print("  -> Nenhum arquivo encontrado.")
-            for item in valor:
-                print(f"  -> {item}")
+    # --- 1. LÓGICA PARA LIDAR COM LINKS DE PESQUISA ---
+    # Se retornou links de álbuns, entramos no primeiro para extrair o vídeo real
+    if resultado.get("plataforma") == "Erome (Pesquisa)" and resultado.get("arquivos"):
+        primeiro_album = resultado["arquivos"][0]
+        print(f"\n[*] Pesquisa detectada. Entrando no 1º álbum: {primeiro_album}")
+        
+        # Roda o scraper de novo, mas agora focado no álbum
+        resultado = processar_link(primeiro_album)
+        
+        if "erro" in resultado:
+            print(f"❌ Erro ao ler o álbum: {resultado['erro']}")
+            sys.exit(1)
+
+    arquivos_encontrados = resultado.get("arquivos", [])
+    if not arquivos_encontrados:
+        print("  -> Nenhum vídeo mp4 encontrado na página.")
+        sys.exit(1)
+        
+    video_mp4 = arquivos_encontrados[0] # Pega o primeiro vídeo encontrado
+    titulo_video = resultado.get("titulo", "Vídeo")
+    
+    print(f"[*] Vídeo alvo extraído: {video_mp4}")
+    
+    # --- 2. LÓGICA DE DISPARO PARA O TELEGRAM ---
+    # Puxa o Token que está configurado nos "Secrets" do seu GitHub
+    bot_token = os.environ.get("TELEGRAM_TOKEN")
+    
+    # Puxa o ID do chat configurado no GitHub OU o que foi preenchido lá no Front-end
+    chat_id = dados_recebidos.get("chat_id") or os.environ.get("TELEGRAM_CHAT_ID")
+
+    if not bot_token or not chat_id:
+        print("[!] ERRO: TELEGRAM_TOKEN ou CHAT_ID não configurados.")
+        print("[!] Verifique as Secrets do repositório ou o preenchimento do painel.")
+        sys.exit(1)
+
+    print(f"\n[*] Iniciando disparo para o Telegram (Chat ID: {chat_id})...")
+
+    # Monta a legenda puxando a copy do Front-end (se existir)
+    copy_front = dados_recebidos.get("copy_principal", "")
+    legenda = f"🔥 {titulo_video}\n\n{copy_front}" if copy_front else f"🔥 {titulo_video}"
+
+    # Dispara via API Oficial do Telegram
+    api_url = f"https://api.telegram.org/bot{bot_token}/sendVideo"
+    payload = {
+        "chat_id": chat_id,
+        "video": video_mp4,
+        "caption": legenda
+    }
+
+    try:
+        # Envia a requisição
+        req = requests.post(api_url, data=payload, timeout=60)
+        resp = req.json()
+        
+        if resp.get("ok"):
+            print("[✓] SUCESSO! Vídeo enviado para o canal.")
         else:
-            print(f"{chave.upper()}: {valor}")
+            print(f"[!] Falha do Telegram: {resp.get('description')}")
             
-    print("="*30)
-    print("[✓] Processo concluído com sucesso.")
-    # A partir daqui, seu código original do vendedor.py assume para disparar pro Telegram!
+    except Exception as e:
+        print(f"[!] Erro de conexão com a API do Telegram: {str(e)}")
