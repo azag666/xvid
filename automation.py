@@ -81,13 +81,7 @@ if __name__ == "__main__":
     if config_data_env:
         try:
             dados_recebidos = json.loads(config_data_env)
-            # Lê exatamente a chave do novo Frontend
             link_input = dados_recebidos.get('url_scraping')
-            
-            # Lê outras configurações opcionais do painel
-            chat_id = dados_recebidos.get('chat_id')
-            puxar_titulo = dados_recebidos.get('puxar_titulo')
-            
             print("[*] Comando JSON recebido com sucesso do Front-end Sniper Control!")
         except json.JSONDecodeError:
             print("[!] Erro crítico: O Front-end enviou um payload inválido.")
@@ -104,10 +98,10 @@ if __name__ == "__main__":
 
     print(f"\n[*] Iniciando extração para a URL: {link_input}")
     
-    # 4. EXECUTA O SCRAPING
+    # 4. EXECUTA O SCRAPING INICIAL
     resultado = processar_link(link_input)
     
-   print("\n" + "="*30)
+    print("\n" + "="*30)
     print("      RESULTADO DA EXTRAÇÃO")
     print("="*30)
     
@@ -115,48 +109,44 @@ if __name__ == "__main__":
         print(f"❌ {resultado['erro']}")
         sys.exit(1)
         
-    # --- 1. LÓGICA PARA LIDAR COM LINKS DE PESQUISA ---
-    # Se retornou links de álbuns, entramos no primeiro para extrair o vídeo real
+    # --- 5. LÓGICA DE NAVEGAÇÃO DE PESQUISA ---
+    # Se for uma pesquisa, pega o primeiro álbum e raspa o vídeo dele
     if resultado.get("plataforma") == "Erome (Pesquisa)" and resultado.get("arquivos"):
         primeiro_album = resultado["arquivos"][0]
         print(f"\n[*] Pesquisa detectada. Entrando no 1º álbum: {primeiro_album}")
         
-        # Roda o scraper de novo, mas agora focado no álbum
         resultado = processar_link(primeiro_album)
         
         if "erro" in resultado:
             print(f"❌ Erro ao ler o álbum: {resultado['erro']}")
             sys.exit(1)
 
+    # --- 6. PREPARAÇÃO DO VÍDEO ---
     arquivos_encontrados = resultado.get("arquivos", [])
     if not arquivos_encontrados:
         print("  -> Nenhum vídeo mp4 encontrado na página.")
         sys.exit(1)
         
-    video_mp4 = arquivos_encontrados[0] # Pega o primeiro vídeo encontrado
+    video_mp4 = arquivos_encontrados[0]
     titulo_video = resultado.get("titulo", "Vídeo")
     
-    print(f"[*] Vídeo alvo extraído: {video_mp4}")
+    print(f"[*] Vídeo alvo extraído com sucesso: {video_mp4}")
     
-    # --- 2. LÓGICA DE DISPARO PARA O TELEGRAM ---
-    # Puxa o Token que está configurado nos "Secrets" do seu GitHub
+    # --- 7. DISPARO PARA O TELEGRAM ---
     bot_token = os.environ.get("TELEGRAM_TOKEN")
-    
-    # Puxa o ID do chat configurado no GitHub OU o que foi preenchido lá no Front-end
     chat_id = dados_recebidos.get("chat_id") or os.environ.get("TELEGRAM_CHAT_ID")
 
     if not bot_token or not chat_id:
-        print("[!] ERRO: TELEGRAM_TOKEN ou CHAT_ID não configurados.")
-        print("[!] Verifique as Secrets do repositório ou o preenchimento do painel.")
+        print("[!] ERRO: TELEGRAM_TOKEN ou TELEGRAM_CHAT_ID ausentes.")
+        print("[!] Verifique as 'Secrets' do seu repositório no GitHub.")
         sys.exit(1)
 
-    print(f"\n[*] Iniciando disparo para o Telegram (Chat ID: {chat_id})...")
+    print(f"\n[*] Conectando à API do Telegram... (Chat ID: {chat_id})")
 
-    # Monta a legenda puxando a copy do Front-end (se existir)
+    # Puxa o texto de conversão do Front-end (caso você tenha preenchido)
     copy_front = dados_recebidos.get("copy_principal", "")
     legenda = f"🔥 {titulo_video}\n\n{copy_front}" if copy_front else f"🔥 {titulo_video}"
 
-    # Dispara via API Oficial do Telegram
     api_url = f"https://api.telegram.org/bot{bot_token}/sendVideo"
     payload = {
         "chat_id": chat_id,
@@ -165,14 +155,14 @@ if __name__ == "__main__":
     }
 
     try:
-        # Envia a requisição
+        # Envia para o Telegram e aguarda a resposta
         req = requests.post(api_url, data=payload, timeout=60)
         resp = req.json()
         
         if resp.get("ok"):
-            print("[✓] SUCESSO! Vídeo enviado para o canal.")
+            print("[✓] SUCESSO ABSOLUTO! Vídeo publicado no seu canal do Telegram.")
         else:
-            print(f"[!] Falha do Telegram: {resp.get('description')}")
+            print(f"[!] Erro retornado pelo Telegram: {resp.get('description')}")
             
     except Exception as e:
-        print(f"[!] Erro de conexão com a API do Telegram: {str(e)}")
+        print(f"[!] Erro crítico de conexão ao disparar o vídeo: {str(e)}")
