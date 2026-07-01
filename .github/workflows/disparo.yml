@@ -4,6 +4,11 @@ on:
   repository_dispatch:
     types: [iniciar_disparo]
   workflow_dispatch:
+    inputs:
+      link_video:
+        description: 'Cole o link do vídeo (Xvideos ou Erome)'
+        required: false # Mantido como false para não quebrar os agendamentos automáticos
+        type: string
   schedule:
     # Roda a cada 3 horas automaticamente (0 0,3,6,9,12,15,18,21)
     - cron: '0 */3 * * *'
@@ -31,4 +36,12 @@ jobs:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           CONFIG_DATA: ${{ github.event.client_payload.config_data }}
-        run: python automation.py
+        run: |
+          # Verifica se um link foi preenchido no acionamento manual (workflow_dispatch)
+          if [ -n "${{ github.event.inputs.link_video }}" ]; then
+            echo "Rodando automação com link manual..."
+            python automation.py "${{ github.event.inputs.link_video }}"
+          else
+            echo "Rodando automação via agendamento/payload padrão..."
+            python automation.py
+          fi
