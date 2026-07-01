@@ -3,6 +3,7 @@ import os
 import json
 import re
 import requests
+import subprocess
 from bs4 import BeautifulSoup
 from urllib.parse import urlparse
 
@@ -110,7 +111,6 @@ if __name__ == "__main__":
         sys.exit(1)
         
     # --- 5. LÓGICA DE NAVEGAÇÃO DE PESQUISA ---
-    # Se for uma pesquisa, pega o primeiro álbum e raspa o vídeo dele
     if resultado.get("plataforma") == "Erome (Pesquisa)" and resultado.get("arquivos"):
         primeiro_album = resultado["arquivos"][0]
         print(f"\n[*] Pesquisa detectada. Entrando no 1º álbum: {primeiro_album}")
@@ -132,33 +132,30 @@ if __name__ == "__main__":
     
     print(f"[*] Vídeo alvo extraído com sucesso: {video_mp4}")
     
-    # --- 7. DISPARO PARA O TELEGRAM (VIA DOWNLOAD E UPLOAD DIRETO) ---
+    # --- 7. DISPARO PARA O TELEGRAM (COM DOWNLOAD, CORTE E UPLOAD) ---
     bot_token = os.environ.get("TELEGRAM_TOKEN")
     chat_id = dados_recebidos.get("chat_id") or os.environ.get("TELEGRAM_CHAT_ID")
 
     if not bot_token or not chat_id:
         print("[!] ERRO: TELEGRAM_TOKEN ou TELEGRAM_CHAT_ID ausentes.")
-        print("[!] Verifique as 'Secrets' do seu repositório no GitHub.")
         sys.exit(1)
 
     print(f"\n[*] Preparando disparo para o Telegram... (Chat ID: {chat_id})")
 
-    # Puxa o texto de conversão do Front-end
     copy_front = dados_recebidos.get("copy_principal", "")
     legenda = f"🔥 {titulo_video}\n\n{copy_front}" if copy_front else f"🔥 {titulo_video}"
 
     api_url = f"https://api.telegram.org/bot{bot_token}/sendVideo"
     temp_filename = "video_temp.mp4"
+    temp_cropped = "video_temp_cropped.mp4"
 
     try:
-        print("[*] Baixando o vídeo para contornar bloqueios do servidor...")
-        # Usamos cabeçalhos para fingir ser um navegador normal acessando o Erome
+        print("[*] Baixando o vídeo...")
         headers_download = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
             "Referer": "https://www.erome.com/"
         }
         
-        # Faz o download do vídeo para a máquina do GitHub Actions
         vid_resposta = requests.get(video_mp4, headers=headers_download, stream=True, timeout=60)
         vid_resposta.raise_for_status()
         
@@ -166,28 +163,49 @@ if __name__ == "__main__":
             for chunk in vid_resposta.iter_content(chunk_size=8192):
                 f.write(chunk)
                 
-        print("[*] Download concluído! Fazendo upload para o Telegram...")
+        # --- ETAPA DE CORTE DA MARCA D'ÁGUA (FFMPEG) ---
+        print("[*] Aplicando corte para remover marca d'água inferior (FFmpeg)...")
+        # 'crop=iw:ih-90:0:0' -> Mantém a largura (iw), tira 90 pixels da altura (ih-90), começando do topo (0,0)
+        comando_ffmpeg = [
+            "ffmpeg", "-y", "-i", temp_filename,
+            "-filter:v", "crop=iw:ih-90:0:0",
+            "-preset", "ultrafast",
+            "-c:a", "copy",
+            temp_cropped
+        ]
         
-        # Envia o arquivo físico para o Telegram
+        try:
+            # Executa o FFmpeg ocultando os logs visuais para não poluir o terminal
+            subprocess.run(comando_ffmpeg, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            
+            # Se o corte deu certo, substitui o arquivo original pelo cortado
+            if os.path.exists(temp_cropped):
+                os.remove(temp_filename)
+                os.rename(temp_cropped, temp_filename)
+                print("[*] Corte da marca d'água concluído com sucesso!")
+        except Exception as e:
+            print(f"[!] Erro ao tentar cortar o vídeo. Enviando versão original por segurança: {e}")
+
+        # --- UPLOAD PARA O TELEGRAM ---
+        print("[*] Fazendo upload para o Telegram...")
+        
         with open(temp_filename, 'rb') as video_file:
             payload = {"chat_id": chat_id, "caption": legenda}
             files = {"video": video_file}
             
-            # Timeout estendido para 300 segundos (5 min) caso o vídeo seja muito pesado
             req = requests.post(api_url, data=payload, files=files, timeout=300)
             resp = req.json()
         
-        # Apaga o arquivo temporário para não ocupar espaço no servidor
-        if os.path.exists(temp_filename):
-            os.remove(temp_filename)
+        # Limpeza dos arquivos temporários
+        if os.path.exists(temp_filename): os.remove(temp_filename)
+        if os.path.exists(temp_cropped): os.remove(temp_cropped)
         
         if resp.get("ok"):
-            print("[✓] SUCESSO ABSOLUTO! Vídeo publicado no seu canal do Telegram.")
+            print("[✓] SUCESSO ABSOLUTO! Vídeo publicado no seu canal do Telegram sem a marca inferior.")
         else:
             print(f"[!] Erro retornado pelo Telegram: {resp.get('description')}")
             
     except Exception as e:
-        print(f"[!] Erro crítico de conexão ao baixar ou disparar o vídeo: {str(e)}")
-        # Garante que o arquivo seja apagado mesmo se der erro
-        if os.path.exists(temp_filename):
-            os.remove(temp_filename)
+        print(f"[!] Erro crítico de conexão ao processar ou disparar o vídeo: {str(e)}")
+        if os.path.exists(temp_filename): os.remove(temp_filename)
+        if os.path.exists(temp_cropped): os.remove(temp_cropped)
