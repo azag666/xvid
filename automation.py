@@ -1,3 +1,8 @@
+import sys
+import re
+import requests
+from bs4 import BeautifulSoup
+from urllib.parse import urlparse
 import re
 import requests
 from bs4 import BeautifulSoup
@@ -47,26 +52,46 @@ class EromeScraper(ScraperBase):
         html = self.fetch(url)
         soup = BeautifulSoup(html, 'html.parser')
         
-        # Extrai o título principal do álbum/vídeo
-        title_tag = soup.find('h1')
-        title = title_tag.text.strip() if title_tag else "Sem título"
-        
-        # Erome pode ter múltiplos vídeos ou imagens na mesma página.
-        # Buscando todas as tags <video> e extraindo o src.
-        media_urls = []
-        for video_tag in soup.find_all('video'):
-            source = video_tag.find('source')
-            if source and source.get('src'):
-                media_urls.append(source.get('src'))
-                
-        # Caso queira raspar imagens também, basta adicionar a lógica para tags <img>
-        
-        return {
-            "plataforma": "Erome",
-            "titulo": title,
-            "arquivos": media_urls,
-            "link_original": url
-        }
+        # 1. CENÁRIO: Página de Pesquisa
+        if "/search?q=" in url:
+            # Pega o termo pesquisado da URL
+            termo = url.split('q=')[-1].replace('+', ' ')
+            title = f"Resultados da pesquisa: {termo}"
+            
+            album_links = []
+            # Procura por todas as tags <a> que contêm '/a/' (links de álbuns)
+            for a_tag in soup.find_all('a', href=True):
+                href = a_tag['href']
+                if '/a/' in href and href not in album_links:
+                    # Garante que o link esteja completo
+                    full_link = href if href.startswith('http') else f"https://www.erome.com{href}"
+                    album_links.append(full_link)
+            
+            return {
+                "plataforma": "Erome (Pesquisa)",
+                "titulo": title,
+                "arquivos": album_links, # Retorna a lista de links para os álbuns
+                "link_original": url
+            }
+            
+        # 2. CENÁRIO: Página de Álbum/Vídeo Específico
+        else:
+            title_tag = soup.find('h1')
+            title = title_tag.text.strip() if title_tag else "Sem título"
+            
+            media_urls = []
+            # Extrai os vídeos da página
+            for video_tag in soup.find_all('video'):
+                source = video_tag.find('source')
+                if source and source.get('src'):
+                    media_urls.append(source.get('src'))
+                    
+            return {
+                "plataforma": "Erome (Álbum)",
+                "titulo": title,
+                "arquivos": media_urls, # Retorna os links diretos dos vídeos
+                "link_original": url
+            }
 
 def processar_link(url):
     """Identifica o domínio e direciona para o scraper correto."""
