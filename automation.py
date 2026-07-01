@@ -92,29 +92,24 @@ def processar_link(url):
         return {"erro": f"Erro inesperado ao processar: {str(e)}"}
 
 if __name__ == "__main__":
-    print("="*40)
-    print("   AUTOMAÇÃO DE SCRAPING (Multi-Target)  ")
-    print("="*40)
+    # Verifica se o link foi passado na execução do script
+    if len(sys.argv) < 2:
+        print("[!] Erro: Nenhum link fornecido.")
+        print("Uso correto: python automation.py <URL>")
+        sys.exit(1)
+        
+    # Pega o primeiro argumento passado após 'automation.py'
+    link_input = sys.argv[1].strip()
     
-    while True:
-        link_input = input("\nCole o link (ou digite 'sair' para encerrar): ").strip()
-        
-        if link_input.lower() in ['sair', 'exit', 'quit']:
-            print("Encerrando automação.")
-            break
-            
-        if not link_input.startswith("http"):
-            print("[!] Por favor, insira uma URL válida começando com http:// ou https://")
-            continue
-            
-        resultado = processar_link(link_input)
-        
-        print("\n--- RESULTADO ---")
-        for chave, valor in resultado.items():
-            if isinstance(valor, list):
-                print(f"{chave.capitalize()}:")
-                for item in valor:
-                    print(f"  -> {item}")
-            else:
-                print(f"{chave.capitalize()}: {valor}")
-        print("-" * 17)
+    print(f"[*] Iniciando automação para o link: {link_input}")
+    resultado = processar_link(link_input)
+    
+    print("\n--- RESULTADO ---")
+    for chave, valor in resultado.items():
+        if isinstance(valor, list):
+            print(f"{chave.capitalize()}:")
+            for item in valor:
+                print(f"  -> {item}")
+        else:
+            print(f"{chave.capitalize()}: {valor}")
+    print("-" * 17)
