@@ -114,9 +114,12 @@ if __name__ == "__main__":
     headers_dl = {"User-Agent": "Mozilla/5.0", "Referer": "https://www.erome.com/"}
 
     for idx, (video_mp4, titulo_video) in enumerate(videos_para_baixar):
+        # Lógica rigorosa de legenda conforme checkbox
         legenda_partes = []
-        if puxar_titulo in [True, "true"]: legenda_partes.append(f"🔥 {titulo_video}")
-        if copy_front: legenda_partes.append(copy_front)
+        if puxar_titulo in [True, "true"]: 
+            legenda_partes.append(f"🔥 {titulo_video}")
+        if copy_front: 
+            legenda_partes.append(copy_front)
         legenda = "\n\n".join(legenda_partes) if legenda_partes else " "
 
         tmp_f = f"v_{idx}.mp4"
@@ -126,6 +129,7 @@ if __name__ == "__main__":
             with open(tmp_f, 'wb') as f:
                 for chunk in req.iter_content(8192): f.write(chunk)
             
+            # Corte matemático de 150px para marca d'água
             cmd = ["ffmpeg", "-y", "-i", tmp_f, "-filter:v", "crop='trunc(iw/2)*2':'trunc((ih-150)/2)*2':0:0", "-preset", "ultrafast", "-c:a", "copy", tmp_c]
             subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             
