@@ -117,16 +117,39 @@ def processar_link(url):
         return {"erro": f"Erro inesperado ao processar: {str(e)}"}
 
 if __name__ == "__main__":
-    # Verifica se o link foi passado na execução do script
-    if len(sys.argv) < 2:
-        print("[!] Erro: Nenhum link fornecido.")
-        print("Uso correto: python automation.py <URL>")
-        sys.exit(1)
-        
-    # Pega o primeiro argumento passado após 'automation.py'
-    link_input = sys.argv[1].strip()
+    import os
+    import json
     
-    print(f"[*] Iniciando automação para o link: {link_input}")
+    link_input = None
+
+    # 1. TENTA LER O PAYLOAD DO FRONTEND (Netlify)
+    config_data_env = os.environ.get('CONFIG_DATA')
+    if config_data_env:
+        try:
+            # Converte o pacote de texto do front em um dicionário Python
+            config_data = json.loads(config_data_env)
+            
+            # Aqui ele busca a chave onde o link foi salvo. 
+            # Dependendo de como seu front foi programado, pode ser 'url_scraping', 'url', ou 'link'
+            link_input = config_data.get('url_scraping') or config_data.get('url') or config_data.get('link')
+            
+            print("[*] Comando recebido com sucesso pelo painel Sniper Control!")
+            
+        except json.JSONDecodeError:
+            print("[!] Erro: O formato de dados enviado pelo frontend é inválido.")
+
+    # 2. SE NÃO VEIO DO FRONT, TENTA LER O MODO MANUAL (GitHub Actions)
+    if not link_input and len(sys.argv) > 1:
+        link_input = sys.argv[1].strip()
+        print("[*] Comando manual recebido via terminal/GitHub.")
+
+    # 3. SE NÃO ACHAR O LINK EM NENHUM LUGAR, ENCERRA.
+    if not link_input:
+        print("[!] Erro: Nenhum link fornecido pelo Frontend ou Terminal.")
+        sys.exit(1)
+
+    # SEGUE COM O SCRAPING
+    print(f"\n[*] Iniciando extração para: {link_input}")
     resultado = processar_link(link_input)
     
     print("\n--- RESULTADO ---")
