@@ -132,7 +132,7 @@ if __name__ == "__main__":
     
     print(f"[*] Vídeo alvo extraído com sucesso: {video_mp4}")
     
-    # --- 7. DISPARO PARA O TELEGRAM ---
+    # --- 7. DISPARO PARA O TELEGRAM (VIA DOWNLOAD E UPLOAD DIRETO) ---
     bot_token = os.environ.get("TELEGRAM_TOKEN")
     chat_id = dados_recebidos.get("chat_id") or os.environ.get("TELEGRAM_CHAT_ID")
 
@@ -141,23 +141,45 @@ if __name__ == "__main__":
         print("[!] Verifique as 'Secrets' do seu repositório no GitHub.")
         sys.exit(1)
 
-    print(f"\n[*] Conectando à API do Telegram... (Chat ID: {chat_id})")
+    print(f"\n[*] Preparando disparo para o Telegram... (Chat ID: {chat_id})")
 
-    # Puxa o texto de conversão do Front-end (caso você tenha preenchido)
+    # Puxa o texto de conversão do Front-end
     copy_front = dados_recebidos.get("copy_principal", "")
     legenda = f"🔥 {titulo_video}\n\n{copy_front}" if copy_front else f"🔥 {titulo_video}"
 
     api_url = f"https://api.telegram.org/bot{bot_token}/sendVideo"
-    payload = {
-        "chat_id": chat_id,
-        "video": video_mp4,
-        "caption": legenda
-    }
+    temp_filename = "video_temp.mp4"
 
     try:
-        # Envia para o Telegram e aguarda a resposta
-        req = requests.post(api_url, data=payload, timeout=60)
-        resp = req.json()
+        print("[*] Baixando o vídeo para contornar bloqueios do servidor...")
+        # Usamos cabeçalhos para fingir ser um navegador normal acessando o Erome
+        headers_download = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Referer": "https://www.erome.com/"
+        }
+        
+        # Faz o download do vídeo para a máquina do GitHub Actions
+        vid_resposta = requests.get(video_mp4, headers=headers_download, stream=True, timeout=60)
+        vid_resposta.raise_for_status()
+        
+        with open(temp_filename, 'wb') as f:
+            for chunk in vid_resposta.iter_content(chunk_size=8192):
+                f.write(chunk)
+                
+        print("[*] Download concluído! Fazendo upload para o Telegram...")
+        
+        # Envia o arquivo físico para o Telegram
+        with open(temp_filename, 'rb') as video_file:
+            payload = {"chat_id": chat_id, "caption": legenda}
+            files = {"video": video_file}
+            
+            # Timeout estendido para 300 segundos (5 min) caso o vídeo seja muito pesado
+            req = requests.post(api_url, data=payload, files=files, timeout=300)
+            resp = req.json()
+        
+        # Apaga o arquivo temporário para não ocupar espaço no servidor
+        if os.path.exists(temp_filename):
+            os.remove(temp_filename)
         
         if resp.get("ok"):
             print("[✓] SUCESSO ABSOLUTO! Vídeo publicado no seu canal do Telegram.")
@@ -165,4 +187,7 @@ if __name__ == "__main__":
             print(f"[!] Erro retornado pelo Telegram: {resp.get('description')}")
             
     except Exception as e:
-        print(f"[!] Erro crítico de conexão ao disparar o vídeo: {str(e)}")
+        print(f"[!] Erro crítico de conexão ao baixar ou disparar o vídeo: {str(e)}")
+        # Garante que o arquivo seja apagado mesmo se der erro
+        if os.path.exists(temp_filename):
+            os.remove(temp_filename)
