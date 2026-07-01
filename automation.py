@@ -37,7 +37,6 @@ class EromeScraper(ScraperBase):
         html = self.fetch(url)
         soup = BeautifulSoup(html, 'html.parser')
         
-        # Modo Pesquisa
         if "/search?q=" in url:
             termo = url.split('q=')[-1].replace('+', ' ')
             title = f"Resultados da pesquisa: {termo}"
@@ -49,7 +48,6 @@ class EromeScraper(ScraperBase):
                     album_links.append(full_link)
             return {"plataforma": "Erome (Pesquisa)", "titulo": title, "arquivos": album_links, "link_original": url}
             
-        # Modo Álbum/Vídeo
         else:
             title_tag = soup.find('h1')
             title = title_tag.text.strip() if title_tag else "Sem título"
@@ -76,136 +74,142 @@ if __name__ == "__main__":
     link_input = None
     dados_recebidos = {}
 
-    # 1. TENTA LER O PAYLOAD DO FRONTEND
+    # --- 1. LÊ DADOS DO FRONTEND ---
     config_data_env = os.environ.get('CONFIG_DATA')
-    
     if config_data_env:
         try:
             dados_recebidos = json.loads(config_data_env)
-            link_input = dados_recebidos.get('url_scraping')
-            print("[*] Comando JSON recebido com sucesso do Front-end Sniper Control!")
+            link_input = dados_recebidos.get('url_scraping', '').strip()
+            print("[*] Payload do Frontend lido com sucesso!")
         except json.JSONDecodeError:
             print("[!] Erro crítico: O Front-end enviou um payload inválido.")
 
-    # 2. SE NÃO VEIO DO FRONT, TENTA MODO MANUAL (Via terminal)
-    if not link_input and len(sys.argv) > 1:
+    if not link_input and not dados_recebidos.get('media_propria') and len(sys.argv) > 1:
         link_input = sys.argv[1].strip()
-        print("[*] Comando manual recebido via argumento.")
 
-    # 3. VALIDAÇÃO FINAL
-    if not link_input:
-        print("[!] Nenhum link fornecido ('url_scraping' vazia). Encerrando o robô.")
+    media_propria = dados_recebidos.get('media_propria', '').strip()
+    
+    if not link_input and not media_propria:
+        print("[!] Nenhum link ou mídia própria fornecida. Encerrando.")
         sys.exit(1)
 
-    print(f"\n[*] Iniciando extração para a URL: {link_input}")
+    # Variáveis de configuração do Front-end
+    qtd_solicitada = int(dados_recebidos.get('qtd', 1))
+    puxar_titulo = dados_recebidos.get('puxar_titulo', True)
+    copy_front = dados_recebidos.get('copy_principal', "").strip()
+    has_spoiler = dados_recebidos.get('spoiler', False)
     
-    # 4. EXECUTA O SCRAPING INICIAL
-    resultado = processar_link(link_input)
-    
-    print("\n" + "="*30)
-    print("      RESULTADO DA EXTRAÇÃO")
-    print("="*30)
-    
-    if "erro" in resultado:
-        print(f"❌ {resultado['erro']}")
-        sys.exit(1)
-        
-    # --- 5. LÓGICA DE NAVEGAÇÃO DE PESQUISA ---
-    if resultado.get("plataforma") == "Erome (Pesquisa)" and resultado.get("arquivos"):
-        primeiro_album = resultado["arquivos"][0]
-        print(f"\n[*] Pesquisa detectada. Entrando no 1º álbum: {primeiro_album}")
-        
-        resultado = processar_link(primeiro_album)
-        
-        if "erro" in resultado:
-            print(f"❌ Erro ao ler o álbum: {resultado['erro']}")
-            sys.exit(1)
-
-    # --- 6. PREPARAÇÃO DO VÍDEO ---
-    arquivos_encontrados = resultado.get("arquivos", [])
-    if not arquivos_encontrados:
-        print("  -> Nenhum vídeo mp4 encontrado na página.")
-        sys.exit(1)
-        
-    video_mp4 = arquivos_encontrados[0]
-    titulo_video = resultado.get("titulo", "Vídeo")
-    
-    print(f"[*] Vídeo alvo extraído com sucesso: {video_mp4}")
-    
-    # --- 7. DISPARO PARA O TELEGRAM (COM DOWNLOAD, CORTE E UPLOAD) ---
     bot_token = os.environ.get("TELEGRAM_TOKEN")
     chat_id = dados_recebidos.get("chat_id") or os.environ.get("TELEGRAM_CHAT_ID")
 
     if not bot_token or not chat_id:
-        print("[!] ERRO: TELEGRAM_TOKEN ou TELEGRAM_CHAT_ID ausentes.")
+        print("[!] ERRO: TELEGRAM_TOKEN ou TELEGRAM_CHAT_ID ausentes no GitHub.")
         sys.exit(1)
 
-    print(f"\n[*] Preparando disparo para o Telegram... (Chat ID: {chat_id})")
+    # --- 2. COLETA OS VÍDEOS COM BASE NA QUANTIDADE ---
+    videos_para_baixar = []
+    
+    if media_propria:
+        videos_para_baixar.append((media_propria, "Conteúdo Exclusivo"))
+        print(f"[*] Mídia Própria detectada. Pulando scraping.")
+    else:
+        print(f"\n[*] Extraindo vídeos de: {link_input}")
+        resultado = processar_link(link_input)
+        if "erro" in resultado:
+            print(f"❌ {resultado['erro']}")
+            sys.exit(1)
+            
+        if resultado.get("plataforma") == "Erome (Pesquisa)" and resultado.get("arquivos"):
+            for album_url in resultado["arquivos"]:
+                if len(videos_para_baixar) >= qtd_solicitada:
+                    break
+                print(f"[*] Acessando álbum: {album_url}")
+                res_album = processar_link(album_url)
+                if "erro" not in res_album and res_album.get("arquivos"):
+                    for v in res_album["arquivos"]:
+                        if len(videos_para_baixar) >= qtd_solicitada:
+                            break
+                        videos_para_baixar.append((v, res_album.get("titulo", "Vídeo")))
+        else:
+            for v in resultado.get("arquivos", []):
+                if len(videos_para_baixar) >= qtd_solicitada:
+                    break
+                videos_para_baixar.append((v, resultado.get("titulo", "Vídeo")))
 
-    copy_front = dados_recebidos.get("copy_principal", "")
-    legenda = f"🔥 {titulo_video}\n\n{copy_front}" if copy_front else f"🔥 {titulo_video}"
+    if not videos_para_baixar:
+        print("❌ Nenhum vídeo encontrado para download.")
+        sys.exit(1)
+
+    print(f"\n[*] Total de {len(videos_para_baixar)} vídeo(s) para processar.")
 
     api_url = f"https://api.telegram.org/bot{bot_token}/sendVideo"
-    temp_filename = "video_temp.mp4"
-    temp_cropped = "video_temp_cropped.mp4"
+    headers_download = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0)", "Referer": "https://www.erome.com/"}
 
-    try:
-        print("[*] Baixando o vídeo...")
-        headers_download = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-            "Referer": "https://www.erome.com/"
-        }
+    # --- 3. LOOP DE DOWNLOAD, CORTE E ENVIO (RESPEITANDO 'QTD') ---
+    for idx, (video_mp4, titulo_video) in enumerate(videos_para_baixar):
+        print(f"\n--- [Processando Vídeo {idx+1}/{len(videos_para_baixar)}] ---")
         
-        vid_resposta = requests.get(video_mp4, headers=headers_download, stream=True, timeout=60)
-        vid_resposta.raise_for_status()
-        
-        with open(temp_filename, 'wb') as f:
-            for chunk in vid_resposta.iter_content(chunk_size=8192):
-                f.write(chunk)
-                
-        # --- ETAPA DE CORTE DA MARCA D'ÁGUA (FFMPEG) ---
-        print("[*] Aplicando corte para remover marca d'água inferior (FFmpeg)...")
-        # 'crop=iw:ih-90:0:0' -> Mantém a largura (iw), tira 90 pixels da altura (ih-90), começando do topo (0,0)
-        comando_ffmpeg = [
-            "ffmpeg", "-y", "-i", temp_filename,
-            "-filter:v", "crop=iw:ih-90:0:0",
-            "-preset", "ultrafast",
-            "-c:a", "copy",
-            temp_cropped
-        ]
-        
+        # Constrói a legenda exatamente como configurado no front
+        partes_legenda = []
+        if puxar_titulo:
+            partes_legenda.append(f"🔥 {titulo_video}")
+        if copy_front:
+            partes_legenda.append(copy_front)
+            
+        legenda = "\n\n".join(partes_legenda)
+
+        temp_filename = f"video_temp_{idx}.mp4"
+        temp_cropped = f"video_temp_cropped_{idx}.mp4"
+
         try:
-            # Executa o FFmpeg ocultando os logs visuais para não poluir o terminal
+            # DOWNLOAD
+            print("[*] Baixando arquivo fonte...")
+            vid_resposta = requests.get(video_mp4, headers=headers_download, stream=True, timeout=60)
+            vid_resposta.raise_for_status()
+            
+            with open(temp_filename, 'wb') as f:
+                for chunk in vid_resposta.iter_content(chunk_size=8192):
+                    f.write(chunk)
+                    
+            # CORTE FFMPEG (Aumentado para 140 pixels)
+            print("[*] Aplicando corte para remover marca d'água inferior (ih-140)...")
+            comando_ffmpeg = [
+                "ffmpeg", "-y", "-i", temp_filename,
+                "-filter:v", "crop=iw:ih-140:0:0", 
+                "-preset", "ultrafast",
+                "-c:a", "copy",
+                temp_cropped
+            ]
+            
             subprocess.run(comando_ffmpeg, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             
-            # Se o corte deu certo, substitui o arquivo original pelo cortado
             if os.path.exists(temp_cropped):
                 os.remove(temp_filename)
                 os.rename(temp_cropped, temp_filename)
-                print("[*] Corte da marca d'água concluído com sucesso!")
+            
+            # UPLOAD TELEGRAM
+            print("[*] Fazendo upload para o canal...")
+            with open(temp_filename, 'rb') as video_file:
+                payload = {
+                    "chat_id": chat_id, 
+                    "caption": legenda,
+                    "has_spoiler": str(has_spoiler).lower(),
+                    "parse_mode": "HTML"
+                }
+                files = {"video": video_file}
+                req = requests.post(api_url, data=payload, files=files, timeout=300)
+                resp = req.json()
+            
+            if resp.get("ok"):
+                print(f"[✓] Vídeo {idx+1} publicado com sucesso!")
+            else:
+                print(f"[!] Erro no vídeo {idx+1}: {resp.get('description')}")
+                
         except Exception as e:
-            print(f"[!] Erro ao tentar cortar o vídeo. Enviando versão original por segurança: {e}")
+            print(f"[!] Erro no vídeo {idx+1}: {str(e)}")
+            
+        finally:
+            if os.path.exists(temp_filename): os.remove(temp_filename)
+            if os.path.exists(temp_cropped): os.remove(temp_cropped)
 
-        # --- UPLOAD PARA O TELEGRAM ---
-        print("[*] Fazendo upload para o Telegram...")
-        
-        with open(temp_filename, 'rb') as video_file:
-            payload = {"chat_id": chat_id, "caption": legenda}
-            files = {"video": video_file}
-            
-            req = requests.post(api_url, data=payload, files=files, timeout=300)
-            resp = req.json()
-        
-        # Limpeza dos arquivos temporários
-        if os.path.exists(temp_filename): os.remove(temp_filename)
-        if os.path.exists(temp_cropped): os.remove(temp_cropped)
-        
-        if resp.get("ok"):
-            print("[✓] SUCESSO ABSOLUTO! Vídeo publicado no seu canal do Telegram sem a marca inferior.")
-        else:
-            print(f"[!] Erro retornado pelo Telegram: {resp.get('description')}")
-            
-    except Exception as e:
-        print(f"[!] Erro crítico de conexão ao processar ou disparar o vídeo: {str(e)}")
-        if os.path.exists(temp_filename): os.remove(temp_filename)
-        if os.path.exists(temp_cropped): os.remove(temp_cropped)
+    print("\n[✓] Fila de envios concluída.")
