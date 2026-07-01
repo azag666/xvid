@@ -52,10 +52,15 @@ class EromeScraper(ScraperBase):
             title_tag = soup.find('h1')
             title = title_tag.text.strip() if title_tag else "Sem título"
             media_urls = []
+            seen = set()
             for video_tag in soup.find_all('video'):
                 source = video_tag.find('source')
                 if source and source.get('src'):
-                    media_urls.append(source.get('src'))
+                    src = source.get('src')
+                    # Filtra para não adicionar vídeos duplicados no mesmo álbum
+                    if src not in seen:
+                        seen.add(src)
+                        media_urls.append(src)
             return {"plataforma": "Erome (Álbum)", "titulo": title, "arquivos": media_urls, "link_original": url}
 
 def processar_link(url):
@@ -106,14 +111,15 @@ if __name__ == "__main__":
         print("[!] ERRO: TELEGRAM_TOKEN ou TELEGRAM_CHAT_ID ausentes no GitHub.")
         sys.exit(1)
 
-    # --- 2. COLETA OS VÍDEOS COM BASE NA QUANTIDADE ---
+    # --- 2. COLETA OS VÍDEOS COM BASE NA QUANTIDADE (E EVITA DUPLICADOS) ---
     videos_para_baixar = []
+    urls_rastreadas = set()
     
     if media_propria:
         videos_para_baixar.append((media_propria, "Conteúdo Exclusivo"))
-        print(f"[*] Mídia Própria detectada. Pulando scraping.")
+        print(f"[*] Mídia Própria detetada. A ignorar o scraping.")
     else:
-        print(f"\n[*] Extraindo vídeos de: {link_input}")
+        print(f"\n[*] A extrair vídeos de: {link_input}")
         resultado = processar_link(link_input)
         if "erro" in resultado:
             print(f"❌ {resultado['erro']}")
@@ -123,33 +129,38 @@ if __name__ == "__main__":
             for album_url in resultado["arquivos"]:
                 if len(videos_para_baixar) >= qtd_solicitada:
                     break
-                print(f"[*] Acessando álbum: {album_url}")
+                print(f"[*] A aceder ao álbum: {album_url}")
                 res_album = processar_link(album_url)
                 if "erro" not in res_album and res_album.get("arquivos"):
                     for v in res_album["arquivos"]:
-                        if len(videos_para_baixar) >= qtd_solicitada:
-                            break
-                        videos_para_baixar.append((v, res_album.get("titulo", "Vídeo")))
+                        # Garante que o ficheiro nunca foi adicionado à lista antes
+                        if v not in urls_rastreadas:
+                            urls_rastreadas.add(v)
+                            videos_para_baixar.append((v, res_album.get("titulo", "Vídeo")))
+                            if len(videos_para_baixar) >= qtd_solicitada:
+                                break
         else:
             for v in resultado.get("arquivos", []):
-                if len(videos_para_baixar) >= qtd_solicitada:
-                    break
-                videos_para_baixar.append((v, resultado.get("titulo", "Vídeo")))
+                if v not in urls_rastreadas:
+                    urls_rastreadas.add(v)
+                    videos_para_baixar.append((v, resultado.get("titulo", "Vídeo")))
+                    if len(videos_para_baixar) >= qtd_solicitada:
+                        break
 
     if not videos_para_baixar:
         print("❌ Nenhum vídeo encontrado para download.")
         sys.exit(1)
 
-    print(f"\n[*] Total de {len(videos_para_baixar)} vídeo(s) para processar.")
+    print(f"\n[*] Total de {len(videos_para_baixar)} vídeo(s) únicos para processar.")
 
     api_url = f"https://api.telegram.org/bot{bot_token}/sendVideo"
     headers_download = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0)", "Referer": "https://www.erome.com/"}
 
-    # --- 3. LOOP DE DOWNLOAD, CORTE E ENVIO (RESPEITANDO 'QTD') ---
+    # --- 3. LOOP DE DOWNLOAD, CORTE E ENVIO ---
     for idx, (video_mp4, titulo_video) in enumerate(videos_para_baixar):
         print(f"\n--- [Processando Vídeo {idx+1}/{len(videos_para_baixar)}] ---")
         
-        # Constrói a legenda exatamente como configurado no front
+        # Constrói a legenda consoante as opções que marcou no Painel
         partes_legenda = []
         if puxar_titulo:
             partes_legenda.append(f"🔥 {titulo_video}")
@@ -163,7 +174,7 @@ if __name__ == "__main__":
 
         try:
             # DOWNLOAD
-            print("[*] Baixando arquivo fonte...")
+            print(f"[*] A transferir vídeo {idx+1}...")
             vid_resposta = requests.get(video_mp4, headers=headers_download, stream=True, timeout=60)
             vid_resposta.raise_for_status()
             
@@ -171,24 +182,28 @@ if __name__ == "__main__":
                 for chunk in vid_resposta.iter_content(chunk_size=8192):
                     f.write(chunk)
                     
-            # CORTE FFMPEG (Aumentado para 140 pixels)
-            print("[*] Aplicando corte para remover marca d'água inferior (ih-140)...")
+            # CORTE FFMPEG (Agora com cálculo matemático rigoroso para números pares)
+            print("[*] A aplicar corte de 150 pixels para remover a marca de água inferior...")
             comando_ffmpeg = [
                 "ffmpeg", "-y", "-i", temp_filename,
-                "-filter:v", "crop=iw:ih-140:0:0", 
+                # trunc() obriga as dimensões do vídeo cortado a serem números pares para evitar erro do codec h264
+                "-filter:v", "crop='trunc(iw/2)*2':'trunc((ih-150)/2)*2':0:0", 
                 "-preset", "ultrafast",
                 "-c:a", "copy",
                 temp_cropped
             ]
             
-            subprocess.run(comando_ffmpeg, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            
-            if os.path.exists(temp_cropped):
-                os.remove(temp_filename)
-                os.rename(temp_cropped, temp_filename)
+            try:
+                # Capture_output nos ajuda a ver o erro caso falhe, em vez de o silenciar totalmente
+                processo = subprocess.run(comando_ffmpeg, check=True, capture_output=True, text=True)
+                if os.path.exists(temp_cropped):
+                    os.remove(temp_filename)
+                    os.rename(temp_cropped, temp_filename)
+            except subprocess.CalledProcessError as e:
+                print(f"[!] Aviso FFmpeg: Não foi possível cortar a marca de água (Erro interno do codec). Será enviado o vídeo original. Log: {e.stderr}")
             
             # UPLOAD TELEGRAM
-            print("[*] Fazendo upload para o canal...")
+            print("[*] A fazer upload para o canal Telegram...")
             with open(temp_filename, 'rb') as video_file:
                 payload = {
                     "chat_id": chat_id, 
@@ -203,13 +218,13 @@ if __name__ == "__main__":
             if resp.get("ok"):
                 print(f"[✓] Vídeo {idx+1} publicado com sucesso!")
             else:
-                print(f"[!] Erro no vídeo {idx+1}: {resp.get('description')}")
+                print(f"[!] Erro do Telegram no vídeo {idx+1}: {resp.get('description')}")
                 
         except Exception as e:
-            print(f"[!] Erro no vídeo {idx+1}: {str(e)}")
+            print(f"[!] Falha geral no processamento do vídeo {idx+1}: {str(e)}")
             
         finally:
             if os.path.exists(temp_filename): os.remove(temp_filename)
             if os.path.exists(temp_cropped): os.remove(temp_cropped)
 
-    print("\n[✓] Fila de envios concluída.")
+    print("\n[✓] Fila de envios e corte concluída perfeitamente.")
